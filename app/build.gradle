@@ -42,6 +42,16 @@ android {
         }
     }
 
+    // 签名配置：使用 user.home 动态解析当前用户家目录，兼顾跨平台与通用性
+    signingConfigs {
+        release {
+            storeFile file("${System.getProperty("user.home")}/Project/Qzrzz/Auth/Andoroid/release.keystore")
+            storePassword "aubookplayer123"
+            keyAlias "aubookplayer"
+            keyPassword "aubookplayer123"
+        }
+    }
+
     buildTypes {
         debug {
             applicationIdSuffix ".debug"
@@ -49,6 +59,8 @@ android {
         }
 
         release {
+            // 关联 Release 签名文件配置
+            signingConfig signingConfigs.release
             minifyEnabled true
             shrinkResources true
             proguardFiles getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro"

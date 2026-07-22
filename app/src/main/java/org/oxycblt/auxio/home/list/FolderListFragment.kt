@@ -33,6 +33,7 @@ import org.oxycblt.auxio.databinding.ItemParentBinding
 import org.oxycblt.auxio.detail.DetailViewModel
 import org.oxycblt.auxio.home.HomeViewModel
 import org.oxycblt.auxio.list.ClickableListListener
+import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.list.adapter.SelectionIndicatorAdapter
 import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
 import org.oxycblt.auxio.list.recycler.FastScrollRecyclerView
@@ -60,8 +61,9 @@ class FolderListFragment :
     FastScrollRecyclerView.Listener {
     private val homeModel: HomeViewModel by activityViewModels()
     private val detailModel: DetailViewModel by activityViewModels()
+    private val listModel: ListViewModel by activityViewModels()
     private val musicModel: MusicViewModel by activityViewModels()
-    private val folderAdapter = FolderAdapter(this)
+    private val folderAdapter = FolderAdapter(this, ::onOpenMenu)
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentHomeListBinding.inflate(inflater)
@@ -100,6 +102,10 @@ class FolderListFragment :
         detailModel.showFolder(item)
     }
 
+    private fun onOpenMenu(item: SongFolder) {
+        listModel.openMenu(R.menu.folder, item)
+    }
+
     override fun getPopupData(pos: Int): FastScrollRecyclerView.PopupProvider.PopupData? {
         val folder = homeModel.folderList.value.getOrNull(pos) ?: return null
         return when (homeModel.folderSort.mode) {
@@ -134,13 +140,15 @@ class FolderListFragment :
             indexingState == null || (empty && indexingState is IndexingState.Completed)
     }
 
-    private class FolderAdapter(private val listener: ClickableListListener<SongFolder>) :
-        SelectionIndicatorAdapter<SongFolder, FolderViewHolder>(FolderViewHolder.DIFF_CALLBACK) {
+    private class FolderAdapter(
+        private val listener: ClickableListListener<SongFolder>,
+        private val openMenu: (SongFolder) -> Unit,
+    ) : SelectionIndicatorAdapter<SongFolder, FolderViewHolder>(FolderViewHolder.DIFF_CALLBACK) {
         override fun onCreateViewHolder(parent: ViewGroup, viewType: Int) =
             FolderViewHolder.from(parent)
 
         override fun onBindViewHolder(holder: FolderViewHolder, position: Int) {
-            holder.bind(getItem(position), listener)
+            holder.bind(getItem(position), listener, openMenu)
         }
     }
 }
@@ -149,7 +157,11 @@ class FolderListFragment :
 class FolderViewHolder private constructor(private val binding: ItemParentBinding) :
     SelectionIndicatorAdapter.ViewHolder(binding.root) {
 
-    fun bind(folder: SongFolder, listener: ClickableListListener<SongFolder>) {
+    fun bind(
+        folder: SongFolder,
+        listener: ClickableListListener<SongFolder>,
+        openMenu: (SongFolder) -> Unit,
+    ) {
         listener.bind(folder, this)
         binding.parentImage.bind(
             folder.songs,
@@ -164,7 +176,8 @@ class FolderViewHolder private constructor(private val binding: ItemParentBindin
                 binding.context.getPlural(R.plurals.fmt_song_count, folder.songs.size),
                 folder.path.resolve(binding.context),
             )
-        binding.parentMenu.isInvisible = true
+        binding.parentMenu.isInvisible = false
+        binding.parentMenu.setOnClickListener { openMenu(folder) }
     }
 
     override fun updatePlayingIndicator(isActive: Boolean, isPlaying: Boolean) {

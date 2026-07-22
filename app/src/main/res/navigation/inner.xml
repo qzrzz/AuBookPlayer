@@ -64,6 +64,9 @@
             android:id="@+id/open_playlist_menu"
             app:destination="@id/playlist_menu_dialog" />
         <action
+            android:id="@+id/open_folder_menu"
+            app:destination="@id/folder_menu_dialog" />
+        <action
             android:id="@+id/open_selection_menu"
             app:destination="@id/selection_menu_dialog" />
         <action
@@ -389,11 +392,17 @@
             android:id="@+id/open_song_menu"
             app:destination="@id/song_menu_dialog" />
         <action
+            android:id="@+id/open_folder_menu"
+            app:destination="@id/folder_menu_dialog" />
+        <action
             android:id="@+id/open_selection_menu"
             app:destination="@id/selection_menu_dialog" />
         <action
             android:id="@+id/add_to_playlist"
             app:destination="@id/add_to_playlist_dialog" />
+        <action
+            android:id="@+id/new_playlist"
+            app:destination="@id/new_playlist_dialog" />
         <action
             android:id="@+id/play_from_artist"
             app:destination="@id/play_from_artist_dialog" />
@@ -604,6 +613,16 @@
         <argument
             android:name="parcel"
             app:argType="org.oxycblt.auxio.list.menu.Menu$ForGenre$Parcel" />
+    </dialog>
+
+    <dialog
+        android:id="@+id/folder_menu_dialog"
+        android:name="org.oxycblt.auxio.list.menu.FolderMenuDialogFragment"
+        android:label="folder_menu_dialog"
+        tools:layout="@layout/dialog_menu">
+        <argument
+            android:name="parcel"
+            app:argType="org.oxycblt.auxio.list.menu.Menu$ForFolder$Parcel" />
     </dialog>
 
     <dialog

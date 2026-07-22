@@ -96,7 +96,8 @@ class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
     }
 
     override fun onOpenParentMenu() {
-        // Folders are not Music parents; no overflow menu actions.
+        val folder = detailModel.currentFolder.value ?: return
+        listModel.openMenu(R.menu.folder, folder)
     }
 
     override fun onOpenMenu(item: Song) {
@@ -191,6 +192,7 @@ class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
         val directions =
             when (menu) {
                 is Menu.ForSong -> FolderDetailFragmentDirections.openSongMenu(menu.parcel)
+                is Menu.ForFolder -> FolderDetailFragmentDirections.openFolderMenu(menu.parcel)
                 is Menu.ForSelection -> FolderDetailFragmentDirections.openSelectionMenu(menu.parcel)
                 is Menu.ForAlbum,
                 is Menu.ForArtist,
@@ -222,7 +224,14 @@ class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
                         decision.songs.map { it.uid }.toTypedArray()
                     )
                 }
-                is PlaylistDecision.New,
+                is PlaylistDecision.New -> {
+                    L.d("Creating new playlist with ${decision.songs.size} songs")
+                    FolderDetailFragmentDirections.newPlaylist(
+                        decision.songs.map { it.uid }.toTypedArray(),
+                        decision.template,
+                        decision.reason,
+                    )
+                }
                 is PlaylistDecision.Import,
                 is PlaylistDecision.Rename,
                 is PlaylistDecision.Export,

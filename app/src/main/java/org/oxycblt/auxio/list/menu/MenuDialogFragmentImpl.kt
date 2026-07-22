@@ -28,6 +28,7 @@ import org.oxycblt.auxio.databinding.DialogMenuBinding
 import org.oxycblt.auxio.detail.DetailViewModel
 import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.music.MusicViewModel
+import org.oxycblt.auxio.music.SongFolder
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
 import org.oxycblt.auxio.playback.PlaybackViewModel
@@ -260,6 +261,73 @@ class GenreMenuDialogFragment : MenuDialogFragment<Menu.ForGenre>() {
             }
             R.id.action_playlist_add -> musicModel.addToPlaylist(menu.genre)
             R.id.action_share -> requireContext().share(menu.genre)
+            else -> error("Unexpected menu item $item")
+        }
+    }
+}
+
+/**
+ * [MenuDialogFragment] implementation for a [SongFolder].
+ */
+@AndroidEntryPoint
+class FolderMenuDialogFragment : MenuDialogFragment<Menu.ForFolder>() {
+    override val menuModel: MenuViewModel by viewModels()
+    override val listModel: ListViewModel by activityViewModels()
+    private val detailModel: DetailViewModel by activityViewModels()
+    private val musicModel: MusicViewModel by activityViewModels()
+    private val playbackModel: PlaybackViewModel by activityViewModels()
+    private val args: FolderMenuDialogFragmentArgs by navArgs()
+
+    override val parcel
+        get() = args.parcel
+
+    override fun getDisabledItemIds(menu: Menu.ForFolder): Set<Int> {
+        if (menu.folder.songs.isEmpty()) {
+            return setOf(
+                R.id.action_play,
+                R.id.action_shuffle,
+                R.id.action_play_next,
+                R.id.action_queue_add,
+                R.id.action_playlist_add,
+                R.id.action_new_playlist,
+            )
+        }
+        return emptySet()
+    }
+
+    override fun updateMenu(binding: DialogMenuBinding, menu: Menu.ForFolder) {
+        val context = requireContext()
+        binding.menuCover.bind(
+            menu.folder.songs,
+            context.getString(R.string.desc_folder_image, menu.folder.name),
+            R.drawable.ic_file_24,
+            menu.folder.key.hashCode(),
+        )
+        binding.menuType.text = getString(R.string.lbl_folder)
+        binding.menuName.text = menu.folder.name
+        binding.menuInfo.text =
+            getString(
+                R.string.fmt_two,
+                context.getPlural(R.plurals.fmt_song_count, menu.folder.songs.size),
+                menu.folder.path.resolve(context),
+            )
+    }
+
+    override fun onClick(item: MenuItem, menu: Menu.ForFolder) {
+        when (item.itemId) {
+            R.id.action_play -> playbackModel.play(menu.folder.songs)
+            R.id.action_shuffle -> playbackModel.shuffle(menu.folder.songs)
+            R.id.action_detail -> detailModel.showFolder(menu.folder)
+            R.id.action_play_next -> {
+                playbackModel.playNext(menu.folder.songs)
+                requireContext().showToast(R.string.lng_play_next)
+            }
+            R.id.action_queue_add -> {
+                playbackModel.addToQueue(menu.folder.songs)
+                requireContext().showToast(R.string.lng_queue_added)
+            }
+            R.id.action_playlist_add -> musicModel.addToPlaylist(menu.folder.songs)
+            R.id.action_new_playlist -> musicModel.createPlaylist(songs = menu.folder.songs)
             else -> error("Unexpected menu item $item")
         }
     }

@@ -315,6 +315,7 @@ class SearchFragment : ListFragment<Music, FragmentSearchBinding>() {
                 is Menu.ForAlbum -> SearchFragmentDirections.openAlbumMenu(menu.parcel)
                 is Menu.ForArtist -> SearchFragmentDirections.openArtistMenu(menu.parcel)
                 is Menu.ForGenre -> SearchFragmentDirections.openGenreMenu(menu.parcel)
+                is Menu.ForFolder -> error("Unexpected menu $menu")
                 is Menu.ForPlaylist -> SearchFragmentDirections.openPlaylistMenu(menu.parcel)
                 is Menu.ForSelection -> SearchFragmentDirections.openSelectionMenu(menu.parcel)
             }

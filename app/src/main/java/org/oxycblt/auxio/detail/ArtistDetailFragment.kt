@@ -260,6 +260,7 @@ class ArtistDetailFragment : DetailFragment<Artist, Music>() {
                 is Menu.ForSelection ->
                     ArtistDetailFragmentDirections.openSelectionMenu(menu.parcel)
                 is Menu.ForGenre,
+                is Menu.ForFolder,
                 is Menu.ForPlaylist -> error("Unexpected menu $menu")
             }
         findNavController().navigateSafe(directions)

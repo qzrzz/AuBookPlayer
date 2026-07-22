@@ -26,6 +26,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.oxycblt.auxio.list.menu.Menu
 import org.oxycblt.auxio.music.MusicRepository
+import org.oxycblt.auxio.music.SongFolder
 import org.oxycblt.auxio.playback.PlaySong
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
@@ -191,6 +192,18 @@ constructor(private val listSettings: ListSettings, private val musicRepository:
     fun openMenu(@MenuRes menuRes: Int, genre: Genre) {
         L.d("Opening menu for $genre")
         openImpl(Menu.ForGenre(menuRes, genre))
+    }
+
+    /**
+     * Open a menu for a [SongFolder]. This is not a popup menu, instead actually a dialog of menu
+     * options with additional information.
+     *
+     * @param menuRes The resource of the menu to use.
+     * @param folder The [SongFolder] to show.
+     */
+    fun openMenu(@MenuRes menuRes: Int, folder: SongFolder) {
+        L.d("Opening menu for $folder")
+        openImpl(Menu.ForFolder(menuRes, folder))
     }
 
     /**

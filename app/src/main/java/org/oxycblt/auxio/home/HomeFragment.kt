@@ -476,6 +476,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 is Menu.ForAlbum -> HomeFragmentDirections.openAlbumMenu(menu.parcel)
                 is Menu.ForArtist -> HomeFragmentDirections.openArtistMenu(menu.parcel)
                 is Menu.ForGenre -> HomeFragmentDirections.openGenreMenu(menu.parcel)
+                is Menu.ForFolder -> HomeFragmentDirections.openFolderMenu(menu.parcel)
                 is Menu.ForPlaylist -> HomeFragmentDirections.openPlaylistMenu(menu.parcel)
                 is Menu.ForSelection -> HomeFragmentDirections.openSelectionMenu(menu.parcel)
             }

@@ -24,6 +24,7 @@ import javax.inject.Inject
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import org.oxycblt.auxio.music.MusicRepository
+import org.oxycblt.auxio.music.SongFolder
 import org.oxycblt.auxio.playback.PlaySong
 import org.oxycblt.musikr.MusicParent
 import timber.log.Timber as L
@@ -65,6 +66,7 @@ class MenuViewModel @Inject constructor(private val musicRepository: MusicReposi
             is Menu.ForAlbum.Parcel -> unpackAlbumParcel(parcel)
             is Menu.ForArtist.Parcel -> unpackArtistParcel(parcel)
             is Menu.ForGenre.Parcel -> unpackGenreParcel(parcel)
+            is Menu.ForFolder.Parcel -> unpackFolderParcel(parcel)
             is Menu.ForPlaylist.Parcel -> unpackPlaylistParcel(parcel)
             is Menu.ForSelection.Parcel -> unpackSelectionParcel(parcel)
         }
@@ -89,6 +91,20 @@ class MenuViewModel @Inject constructor(private val musicRepository: MusicReposi
     private fun unpackGenreParcel(parcel: Menu.ForGenre.Parcel): Menu.ForGenre? {
         val genre = musicRepository.library?.findGenre(parcel.genreUid) ?: return null
         return Menu.ForGenre(parcel.res, genre)
+    }
+
+    private fun unpackFolderParcel(parcel: Menu.ForFolder.Parcel): Menu.ForFolder? {
+        val library = musicRepository.library ?: return null
+        // Prefer re-building from the live library so song membership stays current.
+        val folder =
+            SongFolder.fromSongs(library.songs).find { it.key == parcel.folderKey }
+                ?: run {
+                    val songs = parcel.songUids.mapNotNull(library::findSong)
+                    if (songs.isEmpty()) return null
+                    // Fallback when path key no longer matches exactly but songs remain.
+                    SongFolder(songs.first().path.directory, songs)
+                }
+        return Menu.ForFolder(parcel.res, folder)
     }
 
     private fun unpackPlaylistParcel(parcel: Menu.ForPlaylist.Parcel): Menu.ForPlaylist? {

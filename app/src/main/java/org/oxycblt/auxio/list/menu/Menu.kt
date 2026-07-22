@@ -21,6 +21,7 @@ package org.oxycblt.auxio.list.menu
 import android.os.Parcelable
 import androidx.annotation.MenuRes
 import kotlinx.parcelize.Parcelize
+import org.oxycblt.auxio.music.SongFolder
 import org.oxycblt.auxio.playback.PlaySong
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
@@ -90,6 +91,19 @@ sealed interface Menu {
             get() = Parcel(res, genre.uid)
 
         @Parcelize data class Parcel(val res: Int, val genreUid: Music.UID) : Menu.Parcel
+    }
+
+    /** Navigate to a [SongFolder] menu dialog. */
+    class ForFolder(@MenuRes override val res: Int, val folder: SongFolder) : Menu {
+        override val parcel
+            get() = Parcel(res, folder.key, folder.songs.map { it.uid })
+
+        @Parcelize
+        data class Parcel(
+            val res: Int,
+            val folderKey: String,
+            val songUids: List<Music.UID>,
+        ) : Menu.Parcel
     }
 
     /** Navigate to a [Playlist] menu dialog. */

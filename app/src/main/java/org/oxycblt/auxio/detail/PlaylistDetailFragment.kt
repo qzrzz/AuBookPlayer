@@ -369,7 +369,8 @@ class PlaylistDetailFragment :
                     PlaylistDetailFragmentDirections.openSelectionMenu(menu.parcel)
                 is Menu.ForArtist,
                 is Menu.ForAlbum,
-                is Menu.ForGenre -> error("Unexpected menu $menu")
+                is Menu.ForGenre,
+                is Menu.ForFolder -> error("Unexpected menu $menu")
             }
         findNavController().navigateSafe(directions)
     }
