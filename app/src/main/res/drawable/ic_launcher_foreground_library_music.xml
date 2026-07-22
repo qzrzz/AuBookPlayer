@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- 矢量图图标：Material Symbols library_music 居中适配图标 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="40"
+    android:viewportHeight="40">
+    <group
+        android:pivotX="20"
+        android:pivotY="20"
+        android:scaleX="1.15"
+        android:scaleY="1.15">
+        <path
+            android:fillColor="#FFFFFF"
+            android:pathData="M20.44,25.75 q1.72,0 2.93,-1.19 t1.21,-2.92 V11.58 h4.89 V8.81 H22.92 v9.64 q-0.49,-0.21 -1.12,-0.42 t-1.36,-0.21 q-1.67,0 -2.82,1.16 t-1.15,2.85 t1.15,2.89 t2.82,1.21 Z M11.67,31.11 q-1.12,0 -1.95,-0.83 t-0.83,-1.95 V6.11 q0,-1.12 0.83,-1.95 t1.95,-0.83 H33.89 q1.12,0 1.95,0.83 t0.83,1.95 V28.33 q0,1.12 -0.83,1.95 t-1.95,0.83 H11.67 Z M11.67,28.33 H33.89 V6.11 H11.67 V28.33 Z M6.11,36.67 q-1.12,0 -1.95,-0.83 t-0.83,-1.95 V8.89 H6.11 V33.89 H31.11 V36.67 H6.11 Z" />
+    </group>
+</vector>

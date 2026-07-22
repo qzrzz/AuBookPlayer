@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="info_app_name" translatable="false">AuBookPlayer Debug</string>
+    <!-- Debug 动态包名与 Provider 鉴权配置 -->
+    <string name="pkg_authority_cover">com.qzrzz.aubookplayer.debug.image.CoverProvider</string>
+</resources>
