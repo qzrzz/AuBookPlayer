@@ -3,7 +3,7 @@
     <!-- Info namespace | App labels -->
     <eat-comment />
 
-    <string name="info_app_desc">A simple, rational music player for android.</string>
+    <string name="info_app_desc">专为有声书打造的播放器， Fork 自 Auxio</string>
 
     <!-- Label Namespace | Static Labels -->
     <eat-comment />
@@ -183,6 +183,7 @@
     <string name="lbl_code">Source code</string>
     <string name="lbl_wiki">Wiki</string>
     <string name="lbl_licenses">Licenses</string>
+    <string name="lbl_original_project">Original project (Auxio)</string>
     <string name="lbl_library_counts">Library statistics</string>
 
     <string name="lbl_selection">Selection</string>
@@ -194,10 +195,11 @@
     <string name="lbl_report">Report</string>
 
     <string name="lbl_author">Author</string>
-    <string name="lbl_author_name">Alexander Capehart</string>
+    <string name="lbl_author_name">Qzrzz</string>
     <string name="lbl_feedback">Feedback</string>
     <string name="lbl_github">Make an issue on GitHub</string>
     <string name="lbl_email">Send an email</string>
+    <string name="lbl_x">X (Twitter)</string>
     <string name="lbl_donate">Donate</string>
     <string name="lbl_supporters">Supporters</string>
 
@@ -393,6 +395,8 @@
     <string name="lng_skip_head_tail_need_playlist">Play from a playlist to configure</string>
     <string name="fmt_skip_seconds_off">Off</string>
     <string name="fmt_skip_seconds">%d s</string>
+    <string name="desc_skip_decrease">Decrease by 1 second</string>
+    <string name="desc_skip_increase">Increase by 1 second</string>
     <string name="fmt_skip_head_tail_status">Head %1$s · Tail %2$s</string>
     <string name="lbl_skip_smart">Smart detect</string>
     <string name="lng_skip_smart_desc">Compare nearby tracks to find shared intro/outro</string>

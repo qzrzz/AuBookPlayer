@@ -20,15 +20,20 @@ package org.oxycblt.auxio.image
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.os.Build
 import coil3.ImageLoader
 import coil3.request.Disposable
 import coil3.request.ImageRequest
+import coil3.request.allowHardware
+import coil3.request.bitmapConfig
 import coil3.size.Size
 import coil3.toBitmap
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
+import kotlin.math.max
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
+import timber.log.Timber as L
 
 /**
  * A utility to provide bitmaps in a race-less manner.
@@ -101,23 +106,35 @@ constructor(
                 customCover = fallbackPlaylist?.let { playlistCoverStore.getCustomCover(it.uid) },
             )
 
+        if (coverData == null) {
+            L.d("No cover data for $song (fallback=$fallbackPlaylist)")
+            target.onCompleted(null)
+            return
+        }
+
         val imageRequest =
             target
                 .onConfigRequest(
                     ImageRequest.Builder(context)
                         .data(coverData)
-                        // Use ORIGINAL sizing, as we are not loading into any View-like component.
-                        .size(Size.ORIGINAL)
+                        // Fixed size is enough for notifications / system media controls and
+                        // avoids ORIGINAL-size edge cases in composition / text fetchers.
+                        .size(Size(MEDIA_COVER_EDGE_PX, MEDIA_COVER_EDGE_PX))
+                        // System media session / notification cannot use hardware bitmaps and may
+                        // show a solid purple placeholder when given one (or when conversion fails).
+                        .allowHardware(false)
+                        .bitmapConfig(Bitmap.Config.ARGB_8888)
                 )
                 .target(
-                    onSuccess = {
+                    onSuccess = { image ->
                         synchronized(this) {
                             if (currentHandle == handle) {
-                                target.onCompleted(it.toBitmap())
+                                target.onCompleted(image.toBitmap().toSoftwareArgb8888())
                             }
                         }
                     },
-                    onError = {
+                    onError = { err ->
+                        L.w("Cover load failed for $song: $err")
                         synchronized(this) {
                             if (currentHandle == handle) {
                                 target.onCompleted(null)
@@ -135,4 +152,36 @@ constructor(
         currentRequest?.run { disposable.dispose() }
         currentRequest = null
     }
+
+    private companion object {
+        /** Edge length for system / widget cover bitmaps. */
+        const val MEDIA_COVER_EDGE_PX = 512
+    }
+}
+
+/**
+ * Convert to a software [Bitmap.Config.ARGB_8888] bitmap suitable for [android.media.session]
+ * metadata and notifications. Hardware bitmaps often appear as a solid purple tile in system UI.
+ */
+private fun Bitmap.toSoftwareArgb8888(): Bitmap {
+    var result = this
+    val isHardware =
+        Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && config == Bitmap.Config.HARDWARE
+    if (isHardware || config != Bitmap.Config.ARGB_8888) {
+        result = copy(Bitmap.Config.ARGB_8888, /* isMutable= */ false) ?: return this
+    }
+    // Cap size so Binder / system UI does not drop oversized album art.
+    val longest = max(result.width, result.height)
+    if (longest > 1024) {
+        val scale = 1024f / longest
+        val w = (result.width * scale).toInt().coerceAtLeast(1)
+        val h = (result.height * scale).toInt().coerceAtLeast(1)
+        val scaled = Bitmap.createScaledBitmap(result, w, h, true)
+        if (scaled !== result && result !== this) {
+            // Only recycle intermediates we created, not the original Coil bitmap.
+            result.recycle()
+        }
+        result = scaled
+    }
+    return result
 }

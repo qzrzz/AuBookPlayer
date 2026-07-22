@@ -1,9 +1,11 @@
 package org.oxycblt.auxio.playback
 
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.View
-import androidx.appcompat.widget.PopupMenu
 import androidx.core.view.isVisible
 import androidx.fragment.app.activityViewModels
 import dagger.hilt.android.AndroidEntryPoint
@@ -14,14 +16,18 @@ import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.showToast
 
 /**
- * Bottom sheet for configuring per-playlist skip-head / skip-tail durations,
- * including smart detection from neighboring tracks.
+ * Bottom sheet for configuring per-playlist skip-head / skip-tail durations.
+ *
+ * Head/tail can be adjusted one second at a time with − / + steppers (long-press to repeat).
+ * Smart detection from neighboring tracks is also available.
  */
 @AndroidEntryPoint
 class SkipHeadTailBottomSheetFragment :
     ViewBindingBottomSheetDialogFragment<DialogSkipHeadTailBinding>() {
 
     private val playbackModel: PlaybackViewModel by activityViewModels()
+    private val repeatHandler = Handler(Looper.getMainLooper())
+    private var repeatRunnable: Runnable? = null
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         DialogSkipHeadTailBinding.inflate(inflater)
@@ -33,30 +39,109 @@ class SkipHeadTailBottomSheetFragment :
         super.onBindingCreated(binding, savedInstanceState)
 
         binding.skipSmartItem.setOnClickListener {
-            if (playbackModel.skipAnalyzeState.value is SkipAnalyzeState.Running) return@setOnClickListener
+            if (playbackModel.skipAnalyzeState.value is SkipAnalyzeState.Running) {
+                return@setOnClickListener
+            }
             playbackModel.analyzeSkipHeadTail()
         }
-        binding.skipHeadItem.setOnClickListener { view ->
-            showDurationMenu(view, isHead = true)
-        }
-        binding.skipTailItem.setOnClickListener { view ->
-            showDurationMenu(view, isHead = false)
-        }
+
+        bindStepper(
+            minus = binding.skipHeadMinus,
+            plus = binding.skipHeadPlus,
+            isHead = true,
+        )
+        bindStepper(
+            minus = binding.skipTailMinus,
+            plus = binding.skipTailPlus,
+            isHead = false,
+        )
 
         collectImmediately(playbackModel.playlistSkip, ::updateSkip)
         collectImmediately(playbackModel.skipAnalyzeState, ::updateAnalyzeState)
     }
 
     override fun onDestroyBinding(binding: DialogSkipHeadTailBinding) {
+        stopRepeat()
         super.onDestroyBinding(binding)
         // Leave Idle so a reopened sheet doesn't re-toast an old success.
         playbackModel.consumeSkipAnalyzeState()
+    }
+
+    private fun bindStepper(minus: View, plus: View, isHead: Boolean) {
+        // Touch handles both single tap (+1s) and long-press repeat; avoid click+touch double-fire.
+        minus.setOnTouchListener(repeatTouchListener(isHead, delta = -1))
+        plus.setOnTouchListener(repeatTouchListener(isHead, delta = +1))
+        minus.isClickable = true
+        plus.isClickable = true
+    }
+
+    private fun repeatTouchListener(isHead: Boolean, delta: Int): View.OnTouchListener {
+        return View.OnTouchListener { view, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> {
+                    view.isPressed = true
+                    view.parent?.requestDisallowInterceptTouchEvent(true)
+                    // First step immediately; further steps while held after a short delay.
+                    adjustSeconds(isHead, delta)
+                    val runnable =
+                        object : Runnable {
+                            override fun run() {
+                                adjustSeconds(isHead, delta)
+                                repeatHandler.postDelayed(this, REPEAT_INTERVAL_MS)
+                            }
+                        }
+                    stopRepeat()
+                    repeatRunnable = runnable
+                    repeatHandler.postDelayed(runnable, REPEAT_INITIAL_DELAY_MS)
+                    true
+                }
+                MotionEvent.ACTION_UP -> {
+                    view.isPressed = false
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                    stopRepeat()
+                    view.performClick()
+                    true
+                }
+                MotionEvent.ACTION_CANCEL -> {
+                    view.isPressed = false
+                    view.parent?.requestDisallowInterceptTouchEvent(false)
+                    stopRepeat()
+                    true
+                }
+                else -> false
+            }
+        }
+    }
+
+    private fun stopRepeat() {
+        repeatRunnable?.let { repeatHandler.removeCallbacks(it) }
+        repeatRunnable = null
+    }
+
+    private fun adjustSeconds(isHead: Boolean, delta: Int) {
+        val current = playbackModel.playlistSkip.value
+        val nextSeconds =
+            (if (isHead) current.headSeconds else current.tailSeconds) + delta
+        val clamped = nextSeconds.coerceIn(MIN_SECONDS, MAX_SECONDS)
+        if (isHead && clamped == current.headSeconds) return
+        if (!isHead && clamped == current.tailSeconds) return
+        val next =
+            if (isHead) {
+                current.copy(headSeconds = clamped)
+            } else {
+                current.copy(tailSeconds = clamped)
+            }
+        playbackModel.setPlaylistSkip(next)
     }
 
     private fun updateSkip(skip: SkipHeadTail) {
         val binding = requireBinding()
         binding.skipHeadStatus.text = formatSeconds(skip.headSeconds)
         binding.skipTailStatus.text = formatSeconds(skip.tailSeconds)
+        binding.skipHeadMinus.isEnabled = skip.headSeconds > MIN_SECONDS
+        binding.skipHeadPlus.isEnabled = skip.headSeconds < MAX_SECONDS
+        binding.skipTailMinus.isEnabled = skip.tailSeconds > MIN_SECONDS
+        binding.skipTailPlus.isEnabled = skip.tailSeconds < MAX_SECONDS
     }
 
     private fun updateAnalyzeState(state: SkipAnalyzeState) {
@@ -104,49 +189,18 @@ class SkipHeadTailBottomSheetFragment :
             SkipAnalyzeError.FAILED -> getString(R.string.lng_skip_smart_failed)
         }
 
-    private fun showDurationMenu(anchor: View, isHead: Boolean) {
-        val popup = PopupMenu(requireContext(), anchor)
-        val current = playbackModel.playlistSkip.value
-        val currentSeconds = if (isHead) current.headSeconds else current.tailSeconds
-
-        SkipHeadTail.DURATION_OPTIONS_SECONDS.forEachIndexed { index, seconds ->
-            val label = formatSeconds(seconds)
-            val item = popup.menu.add(0, seconds, index, label)
-            item.isCheckable = true
-            item.isChecked = seconds == currentSeconds
-        }
-        // Also allow the currently detected non-preset value to appear checked.
-        if (currentSeconds !in SkipHeadTail.DURATION_OPTIONS_SECONDS && currentSeconds > 0) {
-            val item =
-                popup.menu.add(
-                    0,
-                    currentSeconds,
-                    SkipHeadTail.DURATION_OPTIONS_SECONDS.size,
-                    formatSeconds(currentSeconds),
-                )
-            item.isCheckable = true
-            item.isChecked = true
-        }
-        popup.menu.setGroupCheckable(0, true, true)
-
-        popup.setOnMenuItemClickListener { menuItem ->
-            val seconds = menuItem.itemId
-            val next =
-                if (isHead) {
-                    current.copy(headSeconds = seconds)
-                } else {
-                    current.copy(tailSeconds = seconds)
-                }
-            playbackModel.setPlaylistSkip(next)
-            true
-        }
-        popup.show()
-    }
-
     private fun formatSeconds(seconds: Int): String =
         if (seconds <= 0) {
             getString(R.string.fmt_skip_seconds_off)
         } else {
             getString(R.string.fmt_skip_seconds, seconds)
         }
+
+    private companion object {
+        const val MIN_SECONDS = 0
+        /** Matches smart-detect cap. */
+        const val MAX_SECONDS = 120
+        const val REPEAT_INITIAL_DELAY_MS = 400L
+        const val REPEAT_INTERVAL_MS = 80L
+    }
 }

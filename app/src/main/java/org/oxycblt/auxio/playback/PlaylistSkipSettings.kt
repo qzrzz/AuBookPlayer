@@ -51,8 +51,8 @@ data class SkipHeadTail(
     companion object {
         val NONE = SkipHeadTail(0, 0)
 
-        /** Common duration options offered in the UI (seconds). */
-        val DURATION_OPTIONS_SECONDS = listOf(0, 5, 10, 15, 20, 30, 45, 60, 90, 120)
+        /** Inclusive upper bound for manual / smart skip durations (seconds). */
+        const val MAX_SECONDS = 120
     }
 }
 

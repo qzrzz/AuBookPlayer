@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical"
@@ -42,6 +43,7 @@
         <ImageView
             android:layout_width="24dp"
             android:layout_height="24dp"
+            android:contentDescription="@null"
             android:src="@drawable/ic_auto_24"
             app:tint="?attr/colorOnSurface" />
 
@@ -75,86 +77,157 @@
             android:visibility="gone" />
     </LinearLayout>
 
-    <!-- 跳过开头 -->
+    <!-- 跳过开头：标题 + 对齐的 ±1s 步进组 -->
     <LinearLayout
         android:id="@+id/skip_head_item"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="@dimen/spacing_medium"
-        android:paddingVertical="@dimen/spacing_medium">
+        android:paddingVertical="@dimen/spacing_small">
 
         <ImageView
             android:layout_width="24dp"
             android:layout_height="24dp"
+            android:contentDescription="@null"
             android:src="@drawable/ic_skip_next_24"
             app:tint="?attr/colorOnSurface" />
 
-        <LinearLayout
+        <TextView
+            style="@style/Widget.Auxio.TextView.Primary.Compact"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/spacing_medium"
             android:layout_weight="1"
-            android:orientation="vertical">
+            android:text="@string/lbl_skip_head" />
 
-            <TextView
-                style="@style/Widget.Auxio.TextView.Primary.Compact"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/lbl_skip_head" />
+        <!-- Stepper: value fills the gap between − and + and is gravity-centered -->
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="144dp"
+            android:layout_height="40dp">
+
+            <ImageButton
+                android:id="@+id/skip_head_minus"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/desc_skip_decrease"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_remove_24"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="?attr/colorOnSurface" />
 
             <TextView
                 android:id="@+id/skip_head_status"
-                style="@style/Widget.Auxio.TextView.Secondary.Compact"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/fmt_skip_seconds_off" />
-        </LinearLayout>
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="@string/fmt_skip_seconds_off"
+                android:textAlignment="center"
+                android:textAppearance="?attr/textAppearanceLabelLargeEmphasized"
+                android:textColor="?android:attr/textColorPrimary"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/skip_head_plus"
+                app:layout_constraintStart_toEndOf="@+id/skip_head_minus"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:text="12 秒" />
+
+            <ImageButton
+                android:id="@+id/skip_head_plus"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/desc_skip_increase"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_add_24"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="?attr/colorOnSurface" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 
-    <!-- 跳过结尾 -->
+    <!-- 跳过结尾：标题 + 对齐的 ±1s 步进组 -->
     <LinearLayout
         android:id="@+id/skip_tail_item"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true"
         android:gravity="center_vertical"
         android:orientation="horizontal"
         android:paddingHorizontal="@dimen/spacing_medium"
-        android:paddingVertical="@dimen/spacing_medium">
+        android:paddingVertical="@dimen/spacing_small">
 
         <ImageView
             android:layout_width="24dp"
             android:layout_height="24dp"
+            android:contentDescription="@null"
             android:src="@drawable/ic_skip_prev_24"
             app:tint="?attr/colorOnSurface" />
 
-        <LinearLayout
+        <TextView
+            style="@style/Widget.Auxio.TextView.Primary.Compact"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="@dimen/spacing_medium"
             android:layout_weight="1"
-            android:orientation="vertical">
+            android:text="@string/lbl_skip_tail" />
 
-            <TextView
-                style="@style/Widget.Auxio.TextView.Primary.Compact"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/lbl_skip_tail" />
+        <androidx.constraintlayout.widget.ConstraintLayout
+            android:layout_width="144dp"
+            android:layout_height="40dp">
+
+            <ImageButton
+                android:id="@+id/skip_tail_minus"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/desc_skip_decrease"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_remove_24"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="?attr/colorOnSurface" />
 
             <TextView
                 android:id="@+id/skip_tail_status"
-                style="@style/Widget.Auxio.TextView.Secondary.Compact"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/fmt_skip_seconds_off" />
-        </LinearLayout>
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:gravity="center"
+                android:includeFontPadding="false"
+                android:maxLines="1"
+                android:text="@string/fmt_skip_seconds_off"
+                android:textAlignment="center"
+                android:textAppearance="?attr/textAppearanceLabelLargeEmphasized"
+                android:textColor="?android:attr/textColorPrimary"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toStartOf="@+id/skip_tail_plus"
+                app:layout_constraintStart_toEndOf="@+id/skip_tail_minus"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:text="8 秒" />
+
+            <ImageButton
+                android:id="@+id/skip_tail_plus"
+                android:layout_width="40dp"
+                android:layout_height="40dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/desc_skip_increase"
+                android:padding="10dp"
+                android:scaleType="fitCenter"
+                android:src="@drawable/ic_add_24"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                app:tint="?attr/colorOnSurface" />
+        </androidx.constraintlayout.widget.ConstraintLayout>
     </LinearLayout>
 
 </LinearLayout>

@@ -68,23 +68,22 @@ class SkipHeadTailAnalyzer @Inject constructor(@ApplicationContext private val c
 
             L.d("Analyzing skip head/tail across ${usable.size} songs")
 
-            // Heads: index 0 = song start.
+            // Heads: chronological PCM, index 0 = song start.
             val heads =
                 usable.mapNotNull { song ->
                     extractEdge(song, fromStart = true)?.let { clip -> song to clip }
                 }
-            // Tails: reverse so index 0 = song end (outro edge).
+            // Tails: chronological PCM of the last ANALYZE_SECONDS (index 0 is earlier,
+            // last samples are the true song end).
             val tails =
                 usable.mapNotNull { song ->
-                    extractEdge(song, fromStart = false)?.let { clip ->
-                        song to clip.reversedArray()
-                    }
+                    extractEdge(song, fromStart = false)?.let { clip -> song to clip }
                 }
 
             L.d("Decoded ${heads.size} heads, ${tails.size} tails")
 
-            val headMs = estimateCommonEdgeMs(heads.map { it.second }, label = "head")
-            val tailMs = estimateCommonEdgeMs(tails.map { it.second }, label = "tail")
+            val headMs = estimateCommonPrefixMs(heads.map { it.second }, label = "head")
+            val tailMs = estimateCommonSuffixMs(tails.map { it.second }, label = "tail")
 
             val headSec = snapSeconds(headMs)
             val tailSec = snapSeconds(tailMs)
@@ -166,8 +165,9 @@ class SkipHeadTailAnalyzer @Inject constructor(@ApplicationContext private val c
                     AudioFormat.ENCODING_PCM_16BIT
                 }
 
-            // Seek may land earlier than startMs; we discard samples before startUs below.
-            extractor.seekTo(startMs * 1000L, MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+            // Prefer closest sync so tail seeks land nearer the intended start.
+            // Samples before startUs are still discarded below.
+            extractor.seekTo(startMs * 1000L, MediaExtractor.SEEK_TO_CLOSEST_SYNC)
 
             codec = MediaCodec.createDecoderByType(mime)
             codec.configure(format, null, null, 0)
@@ -302,19 +302,41 @@ class SkipHeadTailAnalyzer @Inject constructor(@ApplicationContext private val c
         }
     }
 
-    /**
-     * Estimate common edge length (ms) across mono PCM clips by pairwise lag-tolerant comparison,
-     * then taking the median of successful pair matches.
-     */
-    private fun estimateCommonEdgeMs(clips: List<FloatArray>, label: String): Long {
+    /** Median pairwise common-prefix length (for intros at song start). */
+    private fun estimateCommonPrefixMs(clips: List<FloatArray>, label: String): Long {
         if (clips.size < 2) return 0L
         val matches = ArrayList<Long>()
         for (i in clips.indices) {
             for (j in i + 1 until clips.size) {
-                val ms = commonEdgeMs(clips[i], clips[j])
+                val ms = commonPrefixMs(clips[i], clips[j])
                 if (ms >= MIN_MATCH_MS) {
                     matches.add(ms)
                     L.d("Pair $label[$i,$j] match=${ms}ms")
+                }
+            }
+        }
+        return medianOrZero(matches, label)
+    }
+
+    /**
+     * Median pairwise common-suffix length (for outros at song end).
+     *
+     * Tails are chronological (last sample = song end). We walk backward from the end after
+     * stripping per-track trailing silence so different fade-out lengths do not break alignment.
+     */
+    private fun estimateCommonSuffixMs(clips: List<FloatArray>, label: String): Long {
+        if (clips.size < 2) return 0L
+        val matches = ArrayList<Long>()
+        val silencePads = ArrayList<Long>()
+        for (clip in clips) {
+            silencePads.add(trailingSilenceMs(clip))
+        }
+        for (i in clips.indices) {
+            for (j in i + 1 until clips.size) {
+                val ms = commonSuffixMs(clips[i], clips[j])
+                if (ms >= MIN_MATCH_MS) {
+                    matches.add(ms)
+                    L.d("Pair $label[$i,$j] contentMatch=${ms}ms")
                 }
             }
         }
@@ -323,31 +345,116 @@ class SkipHeadTailAnalyzer @Inject constructor(@ApplicationContext private val c
             return 0L
         }
         matches.sort()
-        // Median is more robust than a low percentile for real shared jingles.
+        val contentMedian = matches[matches.size / 2]
+        // Include typical trailing silence so skip covers jingle + fade/silence.
+        silencePads.sort()
+        val silenceMedian = silencePads[silencePads.size / 2]
+        // Cap silence contribution so we don't over-skip unique content on short fades.
+        val silenceAdd = silenceMedian.coerceAtMost(MAX_TAIL_SILENCE_ADD_MS)
+        val total = contentMedian + silenceAdd
+        L.d(
+            "$label contentMedian=${contentMedian}ms silenceMedian=${silenceMedian}ms " +
+                "→ total=${total}ms"
+        )
+        return total
+    }
+
+    private fun medianOrZero(matches: ArrayList<Long>, label: String): Long {
+        if (matches.isEmpty()) {
+            L.d("No $label pairs matched above ${MIN_MATCH_MS}ms")
+            return 0L
+        }
+        matches.sort()
         val median = matches[matches.size / 2]
         L.d("$label matches=$matches median=${median}ms")
         return median
     }
 
     /**
-     * Find how long two edge-aligned clips stay similar, walking inward from the edge.
-     *
-     * A short lag search (±[MAX_LAG_MS]) is done first so tracks with slightly different
-     * leading silence still align. Pure silence alone is not treated as a shared intro/outro
-     * unless followed by matching non-quiet content (or both sides stay quiet only briefly).
+     * How long trailing quiet audio is at the end of [clip], in ms.
+     * Walks backward in [WINDOW_MS] steps until energy rises.
      */
-    private fun commonEdgeMs(a: FloatArray, b: FloatArray): Long {
+    private fun trailingSilenceMs(clip: FloatArray): Long {
+        val window = (TARGET_SAMPLE_RATE * WINDOW_MS / 1000L).toInt().coerceAtLeast(1)
+        var quietWindows = 0
+        var end = clip.size
+        while (end - window >= 0) {
+            val start = end - window
+            if (windowEnergy(clip, start, window) >= QUIET_ENERGY) break
+            quietWindows++
+            end = start
+            if (quietWindows > MAX_TRAILING_SILENCE_WINDOWS) break
+        }
+        return quietWindows * WINDOW_MS
+    }
+
+    /**
+     * Index just past the last non-quiet sample (exclusive end of content), with a small pad of
+     * quiet samples retained so fades are not cut harshly.
+     */
+    private fun contentEndIndex(clip: FloatArray): Int {
+        val window = (TARGET_SAMPLE_RATE * WINDOW_MS / 1000L).toInt().coerceAtLeast(1)
+        var end = clip.size
+        while (end - window >= 0) {
+            val start = end - window
+            if (windowEnergy(clip, start, window) >= QUIET_ENERGY) {
+                // Keep a short pad of silence after content for fade tails.
+                val pad = (TARGET_SAMPLE_RATE * TAIL_SILENCE_PAD_MS / 1000L).toInt()
+                return min(clip.size, end + pad)
+            }
+            end = start
+        }
+        return clip.size
+    }
+
+    /**
+     * Common prefix from song start (head). Lag-tolerant so slightly different leading silence
+     * still lines up.
+     */
+    private fun commonPrefixMs(a: FloatArray, b: FloatArray): Long {
         val window = (TARGET_SAMPLE_RATE * WINDOW_MS / 1000L).toInt().coerceAtLeast(1)
         val maxLagSamples =
             (TARGET_SAMPLE_RATE * MAX_LAG_MS / 1000L).toInt().coerceAtLeast(window)
         val lagStep = (window / 2).coerceAtLeast(1)
 
-        // Find best lag so that a[lag..] aligns with b[0..] (or vice versa via negative lag).
         var bestLag = 0
         var bestScore = -1f
         var lag = -maxLagSamples
         while (lag <= maxLagSamples) {
-            val score = alignmentScore(a, b, lag, window)
+            val score = alignmentScoreForward(a, b, lag, window)
+            if (score > bestScore) {
+                bestScore = score
+                bestLag = lag
+            }
+            lag += lagStep
+        }
+        if (bestScore < ALIGN_MIN_SCORE) return 0L
+
+        val aOff = if (bestLag > 0) bestLag else 0
+        val bOff = if (bestLag < 0) -bestLag else 0
+        return walkMatchForward(a, b, aOff, bOff, window)
+    }
+
+    /**
+     * Common suffix from song end (tail). Compares chronological tail clips by walking backward
+     * from each track's content end (after ignoring trailing silence).
+     */
+    private fun commonSuffixMs(a: FloatArray, b: FloatArray): Long {
+        val window = (TARGET_SAMPLE_RATE * WINDOW_MS / 1000L).toInt().coerceAtLeast(1)
+        val endA = contentEndIndex(a)
+        val endB = contentEndIndex(b)
+        if (endA < window || endB < window) return 0L
+
+        // Lag on content ends so tracks with slightly different outro timing still align.
+        val maxLagSamples =
+            (TARGET_SAMPLE_RATE * MAX_TAIL_LAG_MS / 1000L).toInt().coerceAtLeast(window)
+        val lagStep = (window / 2).coerceAtLeast(1)
+
+        var bestLag = 0 // applied to A's end relative to B's end
+        var bestScore = -1f
+        var lag = -maxLagSamples
+        while (lag <= maxLagSamples) {
+            val score = alignmentScoreBackward(a, b, endA + lag, endB, window)
             if (score > bestScore) {
                 bestScore = score
                 bestLag = lag
@@ -355,55 +462,44 @@ class SkipHeadTailAnalyzer @Inject constructor(@ApplicationContext private val c
             lag += lagStep
         }
         if (bestScore < ALIGN_MIN_SCORE) {
+            L.d("Tail alignment failed (bestScore=$bestScore)")
             return 0L
         }
 
-        val aOff = if (bestLag > 0) bestLag else 0
-        val bOff = if (bestLag < 0) -bestLag else 0
-        val available =
-            min(a.size - aOff, b.size - bOff).coerceAtLeast(0)
+        val alignedEndA = (endA + bestLag).coerceIn(window, a.size)
+        val alignedEndB = endB.coerceIn(window, b.size)
+        return walkMatchBackward(a, b, alignedEndA, alignedEndB, window)
+    }
+
+    /** Walk forward from offsets while windows stay similar. Returns matched ms. */
+    private fun walkMatchForward(
+        a: FloatArray,
+        b: FloatArray,
+        aOff: Int,
+        bOff: Int,
+        window: Int,
+    ): Long {
+        val available = min(a.size - aOff, b.size - bOff).coerceAtLeast(0)
         val maxWindows = available / window
         if (maxWindows <= 0) return 0L
 
         var matching = 0
         var contentMatched = 0
-        var silenceOnly = 0
         for (w in 0 until maxWindows) {
             val sa = aOff + w * window
             val sb = bOff + w * window
-            val ea = windowEnergy(a, sa, window)
-            val eb = windowEnergy(b, sb, window)
-            val corr = windowCorrelation(a, b, sa, sb, window)
-
-            val bothQuiet = ea < QUIET_ENERGY && eb < QUIET_ENERGY
-            val energyClose =
-                (ea + eb) < 1e-6f ||
-                    abs(ea - eb) / maxOf(ea, eb, 1e-6f) < ENERGY_RATIO_TOLERANCE
-            val similar =
-                if (bothQuiet) {
-                    true
-                } else {
-                    corr >= CORR_THRESHOLD && energyClose
-                }
-
-            if (!similar) break
+            if (!windowsSimilar(a, b, sa, sb, window)) break
             matching++
+            val bothQuiet =
+                windowEnergy(a, sa, window) < QUIET_ENERGY &&
+                    windowEnergy(b, sb, window) < QUIET_ENERGY
             if (bothQuiet) {
-                silenceOnly++
+                if (contentMatched == 0 && matching > MAX_LEADING_SILENCE_WINDOWS) break
             } else {
                 contentMatched++
-                silenceOnly = 0 // reset pure-silence streak after real content
-            }
-
-            // Stop if we only ever saw silence for too long with no shared content.
-            if (contentMatched == 0 && matching > MAX_LEADING_SILENCE_WINDOWS) {
-                // Keep the silence trim only (will be validated below).
-                break
             }
         }
-
         val ms = matching * WINDOW_MS
-        // Require either real shared content, or a short mutual silence pad.
         return when {
             contentMatched > 0 && ms >= MIN_MATCH_MS -> ms
             contentMatched == 0 &&
@@ -413,8 +509,60 @@ class SkipHeadTailAnalyzer @Inject constructor(@ApplicationContext private val c
         }
     }
 
-    /** Score how well [a] and [b] align when [a] is shifted by [lagSamples] relative to [b]. */
-    private fun alignmentScore(
+    /**
+     * Walk backward from exclusive end indices while windows stay similar.
+     * Returns matched content duration in ms (silence after content is handled separately).
+     */
+    private fun walkMatchBackward(
+        a: FloatArray,
+        b: FloatArray,
+        endA: Int,
+        endB: Int,
+        window: Int,
+    ): Long {
+        val maxWindows = min(endA, endB) / window
+        if (maxWindows <= 0) return 0L
+
+        var matching = 0
+        var contentMatched = 0
+        for (w in 0 until maxWindows) {
+            val sa = endA - (w + 1) * window
+            val sb = endB - (w + 1) * window
+            if (sa < 0 || sb < 0) break
+            if (!windowsSimilar(a, b, sa, sb, window)) break
+            matching++
+            val bothQuiet =
+                windowEnergy(a, sa, window) < QUIET_ENERGY &&
+                    windowEnergy(b, sb, window) < QUIET_ENERGY
+            if (!bothQuiet) contentMatched++
+            // Require shared content; pure silence-from-end is not a useful outro match.
+            if (contentMatched == 0 && matching > MAX_TAIL_SILENCE_WALK_WINDOWS) break
+        }
+
+        val ms = matching * WINDOW_MS
+        return if (contentMatched > 0 && ms >= MIN_MATCH_MS) ms else 0L
+    }
+
+    private fun windowsSimilar(
+        a: FloatArray,
+        b: FloatArray,
+        sa: Int,
+        sb: Int,
+        window: Int,
+    ): Boolean {
+        val ea = windowEnergy(a, sa, window)
+        val eb = windowEnergy(b, sb, window)
+        val corr = windowCorrelation(a, b, sa, sb, window)
+        val bothQuiet = ea < QUIET_ENERGY && eb < QUIET_ENERGY
+        if (bothQuiet) return true
+        val energyClose =
+            (ea + eb) < 1e-6f ||
+                abs(ea - eb) / maxOf(ea, eb, 1e-6f) < ENERGY_RATIO_TOLERANCE
+        return corr >= CORR_THRESHOLD && energyClose
+    }
+
+    /** Score forward alignment: [a] shifted by [lagSamples] vs [b] at the start. */
+    private fun alignmentScoreForward(
         a: FloatArray,
         b: FloatArray,
         lagSamples: Int,
@@ -422,7 +570,6 @@ class SkipHeadTailAnalyzer @Inject constructor(@ApplicationContext private val c
     ): Float {
         val aOff = if (lagSamples > 0) lagSamples else 0
         val bOff = if (lagSamples < 0) -lagSamples else 0
-        // Score a few windows near the edge.
         var total = 0f
         var count = 0
         for (w in 0 until ALIGN_WINDOWS) {
@@ -433,15 +580,48 @@ class SkipHeadTailAnalyzer @Inject constructor(@ApplicationContext private val c
             val eb = windowEnergy(b, sb, window)
             val corr = windowCorrelation(a, b, sa, sb, window)
             val bothQuiet = ea < QUIET_ENERGY && eb < QUIET_ENERGY
-            total +=
-                if (bothQuiet) {
-                    0.5f // silence is weak evidence for alignment
-                } else {
-                    corr.coerceAtLeast(0f)
-                }
+            total += if (bothQuiet) 0.4f else corr.coerceAtLeast(0f)
             count++
         }
         return if (count == 0) -1f else total / count
+    }
+
+    /**
+     * Score backward alignment near exclusive ends [endA]/[endB].
+     * Prefers matching non-quiet content over silence.
+     */
+    private fun alignmentScoreBackward(
+        a: FloatArray,
+        b: FloatArray,
+        endA: Int,
+        endB: Int,
+        window: Int,
+    ): Float {
+        if (endA < window || endB < window) return -1f
+        if (endA > a.size || endB > b.size) return -1f
+        var total = 0f
+        var count = 0
+        var contentWindows = 0
+        for (w in 0 until ALIGN_WINDOWS) {
+            val sa = endA - (w + 1) * window
+            val sb = endB - (w + 1) * window
+            if (sa < 0 || sb < 0) break
+            val ea = windowEnergy(a, sa, window)
+            val eb = windowEnergy(b, sb, window)
+            val corr = windowCorrelation(a, b, sa, sb, window)
+            val bothQuiet = ea < QUIET_ENERGY && eb < QUIET_ENERGY
+            if (bothQuiet) {
+                total += 0.25f // silence is weak for tail alignment
+            } else {
+                total += corr.coerceAtLeast(0f)
+                contentWindows++
+            }
+            count++
+        }
+        if (count == 0) return -1f
+        // Require at least some non-quiet evidence near the end.
+        if (contentWindows == 0) return 0f
+        return total / count
     }
 
     private fun windowEnergy(samples: FloatArray, start: Int, len: Int): Float {
@@ -500,10 +680,12 @@ class SkipHeadTailAnalyzer @Inject constructor(@ApplicationContext private val c
     }
 
     companion object {
-        private const val MAX_SONGS = 6
-        private const val NEIGHBORS = 2
+        /** Max tracks to decode/compare (current ± neighbors, padded if at list edge). */
+        private const val MAX_SONGS = 3
+        /** Neighbors on each side of the current track (1 before + current + 1 after = 3). */
+        private const val NEIGHBORS = 1
         /** How much of each edge to decode. */
-        private const val ANALYZE_SECONDS = 60
+        private const val ANALYZE_SECONDS = 75
         private const val TARGET_SAMPLE_RATE = 8000
         private const val WINDOW_MS = 100L
         /** Minimum shared non-trivial match. */
@@ -512,14 +694,23 @@ class SkipHeadTailAnalyzer @Inject constructor(@ApplicationContext private val c
         private const val MIN_SONG_DURATION_MS = 15_000L
         private const val MAX_SKIP_SECONDS = 120
         /** Pearson correlation threshold for non-quiet windows. */
-        private const val CORR_THRESHOLD = 0.75f
+        private const val CORR_THRESHOLD = 0.72f
         private const val QUIET_ENERGY = 0.015f
         private const val ENERGY_RATIO_TOLERANCE = 0.55f
         /** Max leading silence counted without shared content (~4s). */
         private const val MAX_LEADING_SILENCE_WINDOWS = 40
-        /** Max alignment lag between tracks. */
-        private const val MAX_LAG_MS = 1500L
-        private const val ALIGN_WINDOWS = 8
-        private const val ALIGN_MIN_SCORE = 0.35f
+        /** How far backward to walk pure silence at the end before giving up. */
+        private const val MAX_TAIL_SILENCE_WALK_WINDOWS = 50
+        private const val MAX_TRAILING_SILENCE_WINDOWS = 80 // 8s measured silence
+        /** Silence pad kept after content end for fade tails. */
+        private const val TAIL_SILENCE_PAD_MS = 300L
+        /** Max silence added on top of matched outro content. */
+        private const val MAX_TAIL_SILENCE_ADD_MS = 8_000L
+        /** Max alignment lag for intros. */
+        private const val MAX_LAG_MS = 2500L
+        /** Max alignment lag for outros (after silence trim, residual only). */
+        private const val MAX_TAIL_LAG_MS = 2000L
+        private const val ALIGN_WINDOWS = 10
+        private const val ALIGN_MIN_SCORE = 0.30f
     }
 }
