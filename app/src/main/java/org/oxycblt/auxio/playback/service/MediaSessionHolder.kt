@@ -299,12 +299,12 @@ private constructor(
         bitmapProvider.load(
             song,
             object : BitmapProvider.Target {
-                override fun onCompleted(bitmap: Bitmap?) {
+                override fun onCompleted(bitmap: Bitmap) {
                     L.d("Bitmap loaded, applying media session and posting notification")
-                    if (bitmap != null) {
-                        builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bitmap)
-                        builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
-                    }
+                    // Always set art — missing album art makes many system UIs show a solid
+                    // purple (theme primary) tile for tracks with no cover.
+                    builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ART, bitmap)
+                    builder.putBitmap(MediaMetadataCompat.METADATA_KEY_ALBUM_ART, bitmap)
                     val metadata = builder.build()
                     mediaSession.setMetadata(metadata)
                     _notification.updateMetadata(metadata)

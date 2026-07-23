@@ -93,6 +93,7 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
     @Inject lateinit var uiSettings: UISettings
     @Inject lateinit var imageSettings: ImageSettings
     @Inject lateinit var playlistCoverStore: PlaylistCoverStore
+    @Inject lateinit var folderCoverStore: FolderCoverStore
 
     private val image: ImageView
 
@@ -454,6 +455,28 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
             },
             context.getString(R.string.desc_playlist_image, playlist.name),
             R.drawable.ic_playlist_24,
+            squareishShapeAppearance,
+        )
+
+    /**
+     * Bind a [SongFolder]'s image to this view.
+     *
+     * Priority: custom user cover → stacked song covers → generated text cover.
+     */
+    fun bind(folder: org.oxycblt.auxio.music.SongFolder) =
+        bindImpl(
+            { size ->
+                resolveFolderCoverData(
+                    context,
+                    folder,
+                    responsiveCornerRatio(size),
+                    backgroundColor(),
+                    context.coverForegroundColor(),
+                    customCover = folderCoverStore.getCustomCover(folder.key),
+                )
+            },
+            context.getString(R.string.desc_folder_image, folder.name),
+            R.drawable.ic_file_24,
             squareishShapeAppearance,
         )
 

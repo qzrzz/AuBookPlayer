@@ -277,32 +277,33 @@ class FolderMenuDialogFragment : MenuDialogFragment<Menu.ForFolder>() {
     private val musicModel: MusicViewModel by activityViewModels()
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val args: FolderMenuDialogFragmentArgs by navArgs()
+    @javax.inject.Inject lateinit var folderCoverStore: org.oxycblt.auxio.image.FolderCoverStore
 
     override val parcel
         get() = args.parcel
 
     override fun getDisabledItemIds(menu: Menu.ForFolder): Set<Int> {
+        val disabled = mutableSetOf<Int>()
         if (menu.folder.songs.isEmpty()) {
-            return setOf(
-                R.id.action_play,
-                R.id.action_shuffle,
-                R.id.action_play_next,
-                R.id.action_queue_add,
-                R.id.action_playlist_add,
-                R.id.action_new_playlist,
-            )
+            disabled +=
+                setOf(
+                    R.id.action_play,
+                    R.id.action_shuffle,
+                    R.id.action_play_next,
+                    R.id.action_queue_add,
+                    R.id.action_playlist_add,
+                    R.id.action_new_playlist,
+                )
         }
-        return emptySet()
+        if (!folderCoverStore.hasCustomCover(menu.folder.key)) {
+            disabled += R.id.action_clear_cover
+        }
+        return disabled
     }
 
     override fun updateMenu(binding: DialogMenuBinding, menu: Menu.ForFolder) {
         val context = requireContext()
-        binding.menuCover.bind(
-            menu.folder.songs,
-            context.getString(R.string.desc_folder_image, menu.folder.name),
-            R.drawable.ic_file_24,
-            menu.folder.key.hashCode(),
-        )
+        binding.menuCover.bind(menu.folder)
         binding.menuType.text = getString(R.string.lbl_folder)
         binding.menuName.text = menu.folder.name
         binding.menuInfo.text =
@@ -315,8 +316,8 @@ class FolderMenuDialogFragment : MenuDialogFragment<Menu.ForFolder>() {
 
     override fun onClick(item: MenuItem, menu: Menu.ForFolder) {
         when (item.itemId) {
-            R.id.action_play -> playbackModel.play(menu.folder.songs)
-            R.id.action_shuffle -> playbackModel.shuffle(menu.folder.songs)
+            R.id.action_play -> playbackModel.play(menu.folder)
+            R.id.action_shuffle -> playbackModel.playFromLastProgress(menu.folder)
             R.id.action_detail -> detailModel.showFolder(menu.folder)
             R.id.action_play_next -> {
                 playbackModel.playNext(menu.folder.songs)
@@ -328,6 +329,8 @@ class FolderMenuDialogFragment : MenuDialogFragment<Menu.ForFolder>() {
             }
             R.id.action_playlist_add -> musicModel.addToPlaylist(menu.folder.songs)
             R.id.action_new_playlist -> musicModel.createPlaylist(songs = menu.folder.songs)
+            R.id.action_set_cover -> musicModel.setFolderCover(menu.folder)
+            R.id.action_clear_cover -> musicModel.clearFolderCover(menu.folder)
             else -> error("Unexpected menu item $item")
         }
     }

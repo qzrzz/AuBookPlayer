@@ -19,6 +19,8 @@
 package org.oxycblt.auxio.detail
 
 import android.os.Bundle
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.view.isVisible
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
@@ -28,6 +30,7 @@ import org.oxycblt.auxio.databinding.FragmentDetailBinding
 import org.oxycblt.auxio.detail.list.FolderDetailListAdapter
 import org.oxycblt.auxio.list.Item
 import org.oxycblt.auxio.list.menu.Menu
+import org.oxycblt.auxio.music.FolderDecision
 import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
 import org.oxycblt.auxio.music.SongFolder
@@ -46,12 +49,14 @@ import timber.log.Timber as L
  * A [DetailFragment] that shows information for a particular [SongFolder].
  *
  * Folders are app-level groupings by source directory (not Musikr [MusicParent]s). Playback uses
- * the folder's song list directly.
+ * the folder's song list directly, with last-progress resume like playlists.
  */
 @AndroidEntryPoint
 class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
     private val args: FolderDetailFragmentArgs by navArgs()
     private val folderListAdapter = FolderDetailListAdapter(this)
+    private var getImageLauncher: ActivityResultLauncher<String>? = null
+    private var pendingCoverFolder: SongFolder? = null
 
     override fun getDetailListAdapter() = folderListAdapter
 
@@ -60,6 +65,18 @@ class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
     override fun onBindingCreated(binding: FragmentDetailBinding, savedInstanceState: Bundle?) {
         super.onBindingCreated(binding, savedInstanceState)
 
+        getImageLauncher =
+            registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                val folder = pendingCoverFolder
+                pendingCoverFolder = null
+                if (uri == null || folder == null) {
+                    L.w("No URI/folder for cover picker")
+                    return@registerForActivityResult
+                }
+                L.d("Received cover URI $uri for folder ${folder.key}")
+                musicModel.setFolderCover(folder, uri)
+            }
+
         detailModel.setFolder(args.folderKey)
         collectImmediately(detailModel.currentFolder, ::updateFolder)
         collectImmediately(detailModel.folderSongList, ::updateList)
@@ -67,7 +84,9 @@ class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
         collect(listModel.menu.flow, ::handleMenu)
         collectImmediately(listModel.selected, ::updateSelection)
         collect(musicModel.playlistDecision.flow, ::handlePlaylistDecision)
+        collect(musicModel.folderDecision.flow, ::handleFolderDecision)
         collect(musicModel.playlistMessage.flow, ::handlePlaylistMessage)
+        collect(musicModel.folderCoverUpdates, ::onFolderCoverUpdated)
         collectImmediately(
             playbackModel.song,
             playbackModel.parent,
@@ -79,20 +98,22 @@ class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
 
     override fun onDestroyBinding(binding: FragmentDetailBinding) {
         super.onDestroyBinding(binding)
+        getImageLauncher = null
         detailModel.folderSongInstructions.consume()
     }
 
     override fun onPlayParent(parent: SongFolder) {
-        playbackModel.play(parent.songs)
+        playbackModel.play(parent)
     }
 
     override fun onShuffleParent(parent: SongFolder) {
-        playbackModel.shuffle(parent.songs)
+        // Reuse the shuffle control as "last progress" / continue (same as playlists).
+        playbackModel.playFromLastProgress(parent)
     }
 
     override fun onRealClick(item: Song) {
-        // Queue is the folder's songs, starting at the selected track.
-        playbackModel.play(item, detailModel.currentFolder.value?.songs.orEmpty())
+        val folder = detailModel.currentFolder.value ?: return
+        playbackModel.play(item, folder)
     }
 
     override fun onOpenParentMenu() {
@@ -108,6 +129,13 @@ class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
         findNavController().navigateSafe(FolderDetailFragmentDirections.sort())
     }
 
+    private fun onFolderCoverUpdated(key: String) {
+        val folder = detailModel.currentFolder.value
+        if (folder != null && folder.key == key) {
+            requireBinding().detailCover.bind(folder)
+        }
+    }
+
     private fun updateFolder(folder: SongFolder?) {
         if (folder == null) {
             L.d("No folder to show, navigating away")
@@ -117,26 +145,42 @@ class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
         val binding = requireBinding()
         val context = requireContext()
         binding.detailNormalToolbar.title = folder.name
-        binding.detailCover.bind(
-            folder.songs,
-            context.getString(R.string.desc_folder_image, folder.name),
-            R.drawable.ic_file_24,
-            folder.key.hashCode(),
-        )
+        binding.detailCover.bind(folder)
         binding.detailType.text = context.getString(R.string.lbl_folder)
         binding.detailName.text = folder.name
         binding.detailSubhead.isVisible = true
         binding.detailSubhead.text = folder.path.resolve(context)
         binding.detailInfo.text =
             context.getPlural(R.plurals.fmt_song_count, folder.songs.size)
-        binding.detailPlayButton?.setOnClickListener { playbackModel.play(folder.songs) }
-        binding.detailShuffleButton?.setOnClickListener { playbackModel.shuffle(folder.songs) }
-        setToolbarPlaybackButtonsEnabled(folder.songs.isNotEmpty())
+
+        val playable = folder.songs.isNotEmpty()
+        binding.detailPlayButton?.apply {
+            isEnabled = playable
+            setOnClickListener { playbackModel.play(folder) }
+        }
+        // Replace shuffle with "last progress" (continue) for folders / audiobooks.
+        binding.detailShuffleButton?.apply {
+            isEnabled = playable
+            text = getString(R.string.lbl_last_progress)
+            setIconResource(R.drawable.ic_history_24)
+            contentDescription = getString(R.string.desc_last_progress)
+            setOnClickListener { playbackModel.playFromLastProgress(folder) }
+        }
+        configureFolderToolbarContinue()
+        setToolbarPlaybackButtonsEnabled(playable)
         updatePlayback(
             playbackModel.song.value,
             playbackModel.parent.value,
             playbackModel.isPlaying.value,
         )
+    }
+
+    /** Point the toolbar shuffle action at resume, with matching icon and label. */
+    private fun configureFolderToolbarContinue() {
+        binding?.detailNormalToolbar?.getMenuButton(R.id.action_shuffle)?.apply {
+            setIconResource(R.drawable.ic_history_24)
+            contentDescription = getString(R.string.desc_last_progress)
+        }
     }
 
     private fun updateList(list: List<Item>) {
@@ -239,6 +283,19 @@ class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
                 is PlaylistDecision.SetCover -> error("Unexpected playlist decision $decision")
             }
         findNavController().navigateSafe(directions)
+    }
+
+    private fun handleFolderDecision(decision: FolderDecision?) {
+        if (decision == null) return
+        when (decision) {
+            is FolderDecision.SetCover -> {
+                L.d("Setting cover for folder ${decision.folder.key}")
+                pendingCoverFolder = decision.folder
+                requireNotNull(getImageLauncher) { "Image picker launcher was not available" }
+                    .launch("image/*")
+                musicModel.folderDecision.consume()
+            }
+        }
     }
 
     private fun handlePlaylistMessage(message: PlaylistMessage?) {

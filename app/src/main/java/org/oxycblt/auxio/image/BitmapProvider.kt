@@ -15,12 +15,16 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
+
 package org.oxycblt.auxio.image
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.drawable.Drawable
 import android.os.Build
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.DrawableCompat
 import coil3.ImageLoader
 import coil3.request.Disposable
 import coil3.request.ImageRequest
@@ -28,9 +32,12 @@ import coil3.request.allowHardware
 import coil3.request.bitmapConfig
 import coil3.size.Size
 import coil3.toBitmap
+import com.google.android.material.R as MR
 import dagger.hilt.android.qualifiers.ApplicationContext
 import javax.inject.Inject
 import kotlin.math.max
+import org.oxycblt.auxio.R
+import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import timber.log.Timber as L
@@ -72,13 +79,18 @@ constructor(
         /**
          * Called when the loading process is completed.
          *
-         * @param bitmap The loaded bitmap, or null if the bitmap could not be loaded.
+         * @param bitmap The loaded bitmap, or a software placeholder when cover art is unavailable.
+         *   Never null — system media session / notification UIs treat missing art as a solid
+         *   purple (theme primary) tile on many devices.
          */
-        fun onCompleted(bitmap: Bitmap?)
+        fun onCompleted(bitmap: Bitmap)
     }
 
     private var currentRequest: Request? = null
     private var currentHandle = 0L
+
+    /** Cached neutral placeholder for songs with no cover art. */
+    @Volatile private var placeholderBitmap: Bitmap? = null
 
     /** If this provider is currently attempting to load something. */
     val isBusy: Boolean
@@ -107,8 +119,8 @@ constructor(
             )
 
         if (coverData == null) {
-            L.d("No cover data for $song (fallback=$fallbackPlaylist)")
-            target.onCompleted(null)
+            L.d("No cover data for $song (fallback=$fallbackPlaylist), using placeholder")
+            target.onCompleted(placeholder())
             return
         }
 
@@ -129,7 +141,10 @@ constructor(
                     onSuccess = { image ->
                         synchronized(this) {
                             if (currentHandle == handle) {
-                                target.onCompleted(image.toBitmap().toSoftwareArgb8888())
+                                val software =
+                                    runCatching { image.toBitmap().toSoftwareArgb8888() }
+                                        .getOrNull()
+                                target.onCompleted(software ?: placeholder())
                             }
                         }
                     },
@@ -137,7 +152,7 @@ constructor(
                         L.w("Cover load failed for $song: $err")
                         synchronized(this) {
                             if (currentHandle == handle) {
-                                target.onCompleted(null)
+                                target.onCompleted(placeholder())
                             }
                         }
                     },
@@ -151,6 +166,21 @@ constructor(
         ++currentHandle
         currentRequest?.run { disposable.dispose() }
         currentRequest = null
+    }
+
+    /**
+     * Neutral album-icon tile for media session / notification when no cover is available.
+     *
+     * Using a multi-tone software bitmap avoids the solid purple tile that system UI draws from
+     * the app theme primary when album art is missing or is a monochrome hardware bitmap.
+     */
+    private fun placeholder(): Bitmap {
+        placeholderBitmap?.let {
+            if (!it.isRecycled) return it
+        }
+        val created = createPlaceholderBitmap(context, MEDIA_COVER_EDGE_PX)
+        placeholderBitmap = created
+        return created
     }
 
     private companion object {
@@ -184,4 +214,34 @@ private fun Bitmap.toSoftwareArgb8888(): Bitmap {
         result = scaled
     }
     return result
+}
+
+/** Draw a software ARGB_8888 album-icon placeholder on a neutral surface background. */
+private fun createPlaceholderBitmap(context: Context, size: Int): Bitmap {
+    val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
+    val canvas = Canvas(bitmap)
+
+    // Prefer themed surface colors; fall back to neutral grays if attrs fail.
+    val background =
+        runCatching {
+                context.getAttrColorCompat(MR.attr.colorSurfaceContainer).defaultColor
+            }
+            .getOrDefault(0xFF2B2930.toInt())
+    val foreground =
+        runCatching {
+                context.getAttrColorCompat(MR.attr.colorOnSurfaceVariant).defaultColor
+            }
+            .getOrDefault(0xFFCAC4D0.toInt())
+
+    canvas.drawColor(background)
+
+    val icon: Drawable =
+        ContextCompat.getDrawable(context, R.drawable.ic_album_24)?.mutate()
+            ?: return bitmap
+    DrawableCompat.setTint(icon, foreground)
+    // Match in-app CoverView: icon is roughly half the cover edge, centered.
+    val pad = size / 4
+    icon.setBounds(pad, pad, size - pad, size - pad)
+    icon.draw(canvas)
+    return bitmap
 }

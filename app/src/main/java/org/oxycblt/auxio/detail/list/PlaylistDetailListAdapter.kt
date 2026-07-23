@@ -30,6 +30,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.R as MR
 import com.google.android.material.shape.MaterialShapeDrawable
 import org.oxycblt.auxio.IntegerTable
+import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.ItemEditHeaderBinding
 import org.oxycblt.auxio.databinding.ItemEditableSongBinding
 import org.oxycblt.auxio.list.EditableListListener
@@ -193,12 +194,16 @@ private class EditHeaderViewHolder private constructor(private val binding: Item
             setOnClickListener { listener.onStartEdit() }
         }
         binding.headerSort.apply {
+            // Always show sort (not only while editing).
+            isVisible = true
+            contentDescription = binding.context.getString(R.string.lbl_sort)
             TooltipCompat.setTooltipText(this, contentDescription)
             setOnClickListener { listener.onOpenSortMenu() }
         }
     }
 
     override fun updateEditing(editing: Boolean) {
+        // Edit only when not already editing; sort is always available.
         binding.headerEdit.apply {
             isVisible = !editing
             isClickable = !editing
@@ -206,9 +211,9 @@ private class EditHeaderViewHolder private constructor(private val binding: Item
             jumpDrawablesToCurrentState()
         }
         binding.headerSort.apply {
-            isVisible = editing
-            isClickable = editing
-            isFocusable = editing
+            isVisible = true
+            isClickable = true
+            isFocusable = true
             jumpDrawablesToCurrentState()
         }
     }

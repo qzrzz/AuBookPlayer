@@ -31,8 +31,10 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.image.FolderCoverStore
 import org.oxycblt.auxio.image.PlaylistCoverStore
 import org.oxycblt.auxio.list.ListSettings
+import org.oxycblt.auxio.list.sort.Sort
 import org.oxycblt.auxio.util.Event
 import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.Album
@@ -58,6 +60,7 @@ constructor(
     private val listSettings: ListSettings,
     private val musicRepository: MusicRepository,
     private val playlistCoverStore: PlaylistCoverStore,
+    private val folderCoverStore: FolderCoverStore,
 ) : ViewModel(), MusicRepository.UpdateListener, MusicRepository.IndexingListener {
     private val externalPlaylistManager = ExternalPlaylistManager.from(context)
 
@@ -81,6 +84,12 @@ constructor(
     val playlistDecision: Event<PlaylistDecision>
         get() = _playlistDecision
 
+    private val _folderDecision = MutableEvent<FolderDecision>()
+
+    /** A [FolderDecision] awaiting a view that can fulfill it (e.g. image picker). */
+    val folderDecision: Event<FolderDecision>
+        get() = _folderDecision
+
     private val _playlistMessage = MutableEvent<PlaylistMessage>()
     val playlistMessage: Event<PlaylistMessage>
         get() = _playlistMessage
@@ -91,6 +100,10 @@ constructor(
      */
     val playlistCoverUpdates: SharedFlow<Music.UID>
         get() = playlistCoverStore.updates
+
+    /** Emits a folder key whenever that folder's custom cover is set or cleared. */
+    val folderCoverUpdates: SharedFlow<String>
+        get() = folderCoverStore.updates
 
     init {
         musicRepository.addUpdateListener(this)
@@ -146,10 +159,17 @@ constructor(
         songs: List<Song> = listOf(),
         reason: PlaylistDecision.New.Reason = PlaylistDecision.New.Reason.NEW,
     ) {
+        // Keep chapter / track order predictable for audiobook folders.
+        val orderedSongs =
+            if (songs.size > 1) {
+                Sort(Sort.Mode.ByName, Sort.Direction.ASCENDING).songs(songs)
+            } else {
+                songs
+            }
         if (name != null) {
-            L.d("Creating $name with ${songs.size} songs]")
+            L.d("Creating $name with ${orderedSongs.size} songs]")
             viewModelScope.launch(Dispatchers.IO) {
-                musicRepository.createPlaylist(name, songs)
+                musicRepository.createPlaylist(name, orderedSongs)
                 val message =
                     when (reason) {
                         PlaylistDecision.New.Reason.NEW -> PlaylistMessage.NewPlaylistSuccess
@@ -159,8 +179,8 @@ constructor(
                 _playlistMessage.put(message)
             }
         } else {
-            L.d("Launching creation dialog for ${songs.size} songs")
-            _playlistDecision.put(PlaylistDecision.New(songs, null, reason))
+            L.d("Launching creation dialog for ${orderedSongs.size} songs")
+            _playlistDecision.put(PlaylistDecision.New(orderedSongs, null, reason))
         }
     }
 
@@ -283,6 +303,32 @@ constructor(
         }
     }
 
+    /**
+     * Prompt the user to pick an image as the custom cover for [folder], or apply [uri] if already
+     * chosen.
+     */
+    fun setFolderCover(folder: SongFolder, uri: Uri? = null) {
+        if (uri != null) {
+            viewModelScope.launch {
+                val ok = folderCoverStore.setCover(folder.key, uri)
+                _playlistMessage.put(
+                    if (ok) PlaylistMessage.CoverSetSuccess else PlaylistMessage.CoverSetFailed
+                )
+            }
+        } else {
+            L.d("Launching cover picker for folder ${folder.key}")
+            _folderDecision.put(FolderDecision.SetCover(folder))
+        }
+    }
+
+    /** Remove any custom cover for [folder], restoring the auto-generated cover. */
+    fun clearFolderCover(folder: SongFolder) {
+        viewModelScope.launch {
+            folderCoverStore.clearCover(folder.key)
+            _playlistMessage.put(PlaylistMessage.CoverCleared)
+        }
+    }
+
     fun renamePlaylist(
         playlist: Playlist,
         name: String? = null,
@@ -382,15 +428,22 @@ constructor(
      * @param playlist The [Playlist] to add to. If null, the user will be prompted for one.
      */
     fun addToPlaylist(songs: List<Song>, playlist: Playlist? = null) {
+        // Sort by name so multi-song / folder adds keep a stable chapter order.
+        val orderedSongs =
+            if (songs.size > 1) {
+                Sort(Sort.Mode.ByName, Sort.Direction.ASCENDING).songs(songs)
+            } else {
+                songs
+            }
         if (playlist != null) {
-            L.d("Adding ${songs.size} songs to $playlist")
+            L.d("Adding ${orderedSongs.size} songs to $playlist")
             viewModelScope.launch(Dispatchers.IO) {
-                musicRepository.addToPlaylist(songs, playlist)
+                musicRepository.addToPlaylist(orderedSongs, playlist)
                 _playlistMessage.put(PlaylistMessage.AddSuccess)
             }
         } else {
-            L.d("Launching addition dialog for songs=${songs.size}")
-            _playlistDecision.put(PlaylistDecision.Add(songs))
+            L.d("Launching addition dialog for songs=${orderedSongs.size}")
+            _playlistDecision.put(PlaylistDecision.Add(orderedSongs))
         }
     }
 
@@ -487,6 +540,12 @@ sealed interface PlaylistDecision {
      * Launch an image picker so the user can set a custom cover for [playlist].
      */
     data class SetCover(val playlist: Playlist) : PlaylistDecision
+}
+
+/** Navigation / UI command for folder-specific actions that need a host fragment. */
+sealed interface FolderDecision {
+    /** Launch an image picker so the user can set a custom cover for [folder]. */
+    data class SetCover(val folder: SongFolder) : FolderDecision
 }
 
 sealed interface PlaylistMessage {

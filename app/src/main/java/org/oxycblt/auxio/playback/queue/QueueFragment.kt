@@ -23,13 +23,12 @@ import android.view.LayoutInflater
 import androidx.core.view.isInvisible
 import androidx.fragment.app.activityViewModels
 import androidx.fragment.app.viewModels
-import androidx.recyclerview.widget.ItemTouchHelper
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.math.min
 import org.oxycblt.auxio.databinding.FragmentQueueBinding
-import org.oxycblt.auxio.list.EditClickListListener
+import org.oxycblt.auxio.list.ClickableListListener
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.ui.ViewBindingFragment
@@ -42,17 +41,16 @@ import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
- * A [ViewBindingFragment] that displays an editable queue.
+ * A [ViewBindingFragment] that displays the current queue (read-only order for audiobooks).
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
 @AndroidEntryPoint
-class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickListListener<Song> {
+class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), ClickableListListener<Song> {
     private val queueModel: QueueViewModel by viewModels()
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val musicModel: MusicViewModel by activityViewModels()
     private val queueAdapter = QueueAdapter(this)
-    private var touchHelper: ItemTouchHelper? = null
 
     override fun onCreateBinding(inflater: LayoutInflater) = FragmentQueueBinding.inflate(inflater)
 
@@ -60,13 +58,8 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickList
         super.onBindingCreated(binding, savedInstanceState)
 
         // --- UI SETUP ---
-        binding.queueRecycler.apply {
-            adapter = queueAdapter
-            touchHelper =
-                ItemTouchHelper(QueueDragCallback(queueModel)).also {
-                    it.attachToRecyclerView(this)
-                }
-        }
+        // No ItemTouchHelper: hide drag handles and disallow reordering / swipe-remove.
+        binding.queueRecycler.adapter = queueAdapter
 
         // Sometimes the scroll can change without the listener being updated, so we also
         // check for relayout events.
@@ -109,7 +102,6 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickList
 
     override fun onDestroyBinding(binding: FragmentQueueBinding) {
         super.onDestroyBinding(binding)
-        touchHelper = null
         binding.queueRecycler.adapter = null
         // Avoid possible race conditions that could cause a bad instruction to be consumed
         // during list initialization and crash the app. Could happen if the user is fast enough.
@@ -118,10 +110,6 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), EditClickList
 
     override fun onClick(item: Song, viewHolder: RecyclerView.ViewHolder) {
         queueModel.goto(viewHolder.bindingAdapterPosition)
-    }
-
-    override fun onPickUp(viewHolder: RecyclerView.ViewHolder) {
-        requireNotNull(touchHelper) { "ItemTouchHelper was not available" }.startDrag(viewHolder)
     }
 
     private fun updateDivider() {

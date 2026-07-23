@@ -43,6 +43,7 @@ import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.music.SongFolder
 import org.oxycblt.auxio.playback.formatDurationMsPopup
 import org.oxycblt.auxio.ui.ViewBindingFragment
+import org.oxycblt.auxio.util.collect
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.getPlural
@@ -87,6 +88,14 @@ class FolderListFragment :
 
         collectImmediately(homeModel.folderList, ::updateFolders)
         collectImmediately(homeModel.empty, musicModel.indexingState, ::updateNoMusicIndicator)
+        collect(musicModel.folderCoverUpdates, ::onFolderCoverUpdated)
+    }
+
+    private fun onFolderCoverUpdated(key: String) {
+        val index = homeModel.folderList.value.indexOfFirst { it.key == key }
+        if (index >= 0) {
+            folderAdapter.notifyItemChanged(index)
+        }
     }
 
     override fun onDestroyBinding(binding: FragmentHomeListBinding) {
@@ -163,12 +172,7 @@ class FolderViewHolder private constructor(private val binding: ItemParentBindin
         openMenu: (SongFolder) -> Unit,
     ) {
         listener.bind(folder, this)
-        binding.parentImage.bind(
-            folder.songs,
-            binding.context.getString(R.string.desc_folder_image, folder.name),
-            R.drawable.ic_file_24,
-            folder.key.hashCode(),
-        )
+        binding.parentImage.bind(folder)
         binding.parentName.text = folder.name
         binding.parentInfo.text =
             binding.context.getString(

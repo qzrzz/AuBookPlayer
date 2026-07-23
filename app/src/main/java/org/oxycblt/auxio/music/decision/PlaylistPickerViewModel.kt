@@ -288,6 +288,8 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
         _currentSongsToAdd.value =
             musicRepository.library
                 ?.let { songUids.mapNotNull(it::findSong).ifEmpty { null } }
+                // Audiobook / folder adds: keep a stable name order when committing.
+                ?.let { NAME_SORT.songs(it) }
                 ?.also(::refreshPlaylistChoices)
         if (_currentSongsToAdd.value == null || songUids.size != _currentSongsToAdd.value?.size) {
             L.w("Given song UIDs to add were (partially) invalid")
@@ -298,7 +300,7 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
         val library = musicRepository.library ?: return
         L.d("Refreshing playlist choices")
         _playlistAddChoices.value =
-            Sort(Sort.Mode.ByName, Sort.Direction.ASCENDING).playlists(library.playlists).map {
+            NAME_SORT.playlists(library.playlists).map {
                 val songSet = it.songs.toSet()
                 PlaylistChoice(it, songs.all(songSet::contains))
             }
@@ -306,6 +308,7 @@ class PlaylistPickerViewModel @Inject constructor(private val musicRepository: M
 
     private companion object {
         private val DEFAULT_EXPORT_CONFIG = ExportConfig(absolute = false, windowsPaths = false)
+        private val NAME_SORT = Sort(Sort.Mode.ByName, Sort.Direction.ASCENDING)
     }
 }
 

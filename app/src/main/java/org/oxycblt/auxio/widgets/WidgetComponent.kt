@@ -124,7 +124,7 @@ private constructor(
                     return builder.size(Size.ORIGINAL).transformations(transformations)
                 }
 
-                override fun onCompleted(bitmap: Bitmap?) {
+                override fun onCompleted(bitmap: Bitmap) {
                     val state = PlaybackState(song, bitmap, isPlaying, repeatMode, isShuffled)
                     L.d("Bitmap loaded, uploading state $state")
                     widgetProvider.update(context, uiSettings, state)

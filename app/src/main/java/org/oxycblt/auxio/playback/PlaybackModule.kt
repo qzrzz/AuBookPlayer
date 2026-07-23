@@ -42,4 +42,8 @@ interface PlaybackModule {
     @Singleton
     @Binds
     fun playlistProgressStore(impl: PlaylistProgressStoreImpl): PlaylistProgressStore
+
+    @Singleton
+    @Binds
+    fun folderProgressStore(impl: FolderProgressStoreImpl): FolderProgressStore
 }

@@ -23,15 +23,16 @@ import android.graphics.drawable.Drawable
 import android.graphics.drawable.LayerDrawable
 import android.view.View
 import android.view.ViewGroup
+import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.core.view.isInvisible
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.R as MR
 import com.google.android.material.shape.MaterialShapeDrawable
 import org.oxycblt.auxio.databinding.ItemEditableSongBinding
-import org.oxycblt.auxio.list.EditClickListListener
+import org.oxycblt.auxio.list.ClickableListListener
 import org.oxycblt.auxio.list.adapter.FlexibleListAdapter
 import org.oxycblt.auxio.list.adapter.PlayingIndicatorAdapter
-import org.oxycblt.auxio.list.recycler.MaterialDragCallback
 import org.oxycblt.auxio.list.recycler.SongViewHolder
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
@@ -43,12 +44,12 @@ import org.oxycblt.musikr.Song
 import timber.log.Timber as L
 
 /**
- * A [RecyclerView.Adapter] that shows an editable list of queue items.
+ * A [RecyclerView.Adapter] that shows the playback queue (order is fixed; no drag reorder).
  *
- * @param listener A [EditClickListListener] to bind interactions to.
+ * @param listener A [ClickableListListener] to bind interactions to.
  * @author Alexander Capehart (OxygenCobalt)
  */
-class QueueAdapter(private val listener: EditClickListListener<Song>) :
+class QueueAdapter(private val listener: ClickableListListener<Song>) :
     FlexibleListAdapter<Song, QueueSongViewHolder>(QueueSongViewHolder.DIFF_CALLBACK) {
     // Since PlayingIndicator adapter relies on an item value, we cannot use it for this
     // adapter, as one item can appear at several points in the UI. Use a similar implementation
@@ -110,24 +111,20 @@ class QueueAdapter(private val listener: EditClickListListener<Song>) :
 }
 
 /**
- * A [PlayingIndicatorAdapter.ViewHolder] that displays an queue [Song] which can be re-ordered and
- * removed. Use [from] to create an instance.
+ * A [PlayingIndicatorAdapter.ViewHolder] that displays a queue [Song]. Use [from] to create an
+ * instance.
  *
  * @author Alexander Capehart (OxygenCobalt)
  */
 class QueueSongViewHolder private constructor(private val binding: ItemEditableSongBinding) :
-    PlayingIndicatorAdapter.ViewHolder(binding.root), MaterialDragCallback.ViewHolder {
-    override val enabled = true
-    override val root = binding.root
-    override val body = binding.body
-    override val delete = binding.background
-    override val liftableBackground =
+    PlayingIndicatorAdapter.ViewHolder(binding.root) {
+    private val liftableBackground =
         MaterialShapeDrawable.createWithElevationOverlay(binding.root.context).apply {
             fillColor = binding.context.getAttrColorCompat(MR.attr.colorSurfaceContainerHighest)
             alpha = 0
         }
 
-    override val roundableBackground: Drawable =
+    private val roundableBackground: Drawable =
         MaterialShapeDrawable.createWithElevationOverlay(binding.context).apply {
             fillColor = binding.context.getAttrColorCompat(MR.attr.colorSurfaceContainerHigh)
         }
@@ -146,28 +143,45 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
 
     init {
         binding.body.background = LayerDrawable(arrayOf(roundableBackground, liftableBackground))
+        // Queue is read-only for order: hide drag handle and reclaim trailing space for text.
+        binding.songDragHandle.isVisible = false
+        binding.songMenu.isVisible = false
+        binding.background.isInvisible = true
+        pinTextToEnd()
+    }
+
+    private fun pinTextToEnd() {
+        fun ConstraintLayout.LayoutParams.pinEndToParent() {
+            endToStart = ConstraintLayout.LayoutParams.UNSET
+            endToEnd = ConstraintLayout.LayoutParams.PARENT_ID
+        }
+        (binding.songName.layoutParams as ConstraintLayout.LayoutParams).apply {
+            pinEndToParent()
+            binding.songName.layoutParams = this
+        }
+        (binding.songInfo.layoutParams as ConstraintLayout.LayoutParams).apply {
+            pinEndToParent()
+            binding.songInfo.layoutParams = this
+        }
     }
 
     /**
      * Bind new data to this instance.
      *
      * @param song The new [Song] to bind.
-     * @param listener A [EditClickListListener] to bind interactions to.
+     * @param listener A [ClickableListListener] to bind interactions to.
      * @param fallbackPlaylist Playlist cover used when [song] has no album art.
      */
     @SuppressLint("ClickableViewAccessibility")
     fun bind(
         song: Song,
-        listener: EditClickListListener<Song>,
+        listener: ClickableListListener<Song>,
         fallbackPlaylist: Playlist? = null,
     ) {
-        listener.bind(song, this, body, binding.songDragHandle)
+        listener.bind(song, this, binding.body)
         binding.songAlbumCover.bind(song, fallbackPlaylist)
         binding.songName.text = song.name.resolve(binding.context)
         binding.songInfo.text = song.artists.resolveNames(binding.context)
-        // Not swiping this ViewHolder if it's being re-bound, ensure that the background is
-        // not visible. See QueueDragCallback for why this is done.
-        binding.background.isInvisible = true
     }
 
     override fun updatePlayingIndicator(isActive: Boolean, isPlaying: Boolean) {

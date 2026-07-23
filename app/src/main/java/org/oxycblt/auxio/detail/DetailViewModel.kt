@@ -538,14 +538,25 @@ constructor(
     }
 
     /**
-     * Apply a [Sort] to the edited playlist. Does nothing if not in an editing session.
+     * Apply a [Sort] to the playlist song order.
+     *
+     * When editing, reorders the edit buffer. Otherwise permanently rewrites the playlist.
      *
      * @param sort The [Sort] to apply.
      */
     fun applyPlaylistSongSort(sort: Sort) {
         val playlist = _currentPlaylist.value ?: return
-        _editedPlaylist.value = sort.songs(_editedPlaylist.value ?: return)
-        refreshPlaylist(playlist.uid, UpdateInstructions.Replace(1))
+        val edited = _editedPlaylist.value
+        if (edited != null) {
+            _editedPlaylist.value = sort.songs(edited)
+            refreshPlaylist(playlist.uid, UpdateInstructions.Replace(1))
+            return
+        }
+        // Outside edit mode: rewrite playlist so the order sticks (audiobook chapter order).
+        viewModelScope.launch {
+            musicRepository.rewritePlaylist(playlist, sort.songs(playlist.songs))
+            refreshPlaylist(playlist.uid, UpdateInstructions.Replace(1))
+        }
     }
 
     /**

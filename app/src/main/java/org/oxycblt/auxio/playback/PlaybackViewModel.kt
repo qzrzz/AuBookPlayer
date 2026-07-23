@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
+import org.oxycblt.auxio.music.SongFolder
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
@@ -64,13 +65,19 @@ constructor(
     private val sleepTimer: SleepTimer,
     private val playlistSkipSettings: PlaylistSkipSettings,
     private val playlistProgressStore: PlaylistProgressStore,
+    private val folderProgressStore: FolderProgressStore,
     private val skipHeadTailAnalyzer: SkipHeadTailAnalyzer,
 ) : ViewModel(), PlaybackStateManager.Listener, PlaybackSettings.Listener {
     private var lastPositionJob: Job? = null
     private var analyzeJob: Job? = null
-    /** Pending seek applied once new playlist playback has started (last-progress resume). */
+    /** Pending seek applied once new playlist/folder playback has started (last-progress resume). */
     private var pendingResumePositionMs: Long? = null
     private var lastProgressSaveMs = 0L
+    /**
+     * When non-null, progress is saved against this [SongFolder.key] (folders are not
+     * [MusicParent]s).
+     */
+    private var activeFolderKey: String? = null
 
     private val _song = MutableStateFlow<Song?>(null)
     /** The currently playing song. */
@@ -197,7 +204,7 @@ constructor(
         L.d("Index moved, updating current song")
         _positionDs.value = playbackManager.progression.calculateElapsedPositionMs().msToDs()
         _song.value = playbackManager.currentSong
-        savePlaylistProgress(force = true)
+        saveListeningProgress(force = true)
 
         _pagerCommand.put(PagerCommand(update = null, scroll = index))
         _pagerQueue.value = _pagerQueue.value.copy(index = index)
@@ -237,15 +244,19 @@ constructor(
         _song.value = playbackManager.currentSong
         _parent.value = parent
         _isShuffled.value = isShuffled
+        // Parent-based playback (playlist/album/…) clears folder progress tracking.
+        if (parent != null) {
+            activeFolderKey = null
+        }
         refreshPlaylistSkip()
         // Resume position is applied after the player has started (skip-head may have run first).
         val resumeAt = pendingResumePositionMs
         pendingResumePositionMs = null
         if (resumeAt != null && resumeAt > 0L) {
-            L.d("Applying playlist resume position ${resumeAt}ms")
+            L.d("Applying resume position ${resumeAt}ms")
             playbackManager.seekTo(resumeAt)
         } else {
-            savePlaylistProgress(force = true)
+            saveListeningProgress(force = true)
         }
 
         _pagerCommand.put(PagerCommand(update = UpdateInstructions.Replace(0), scroll = index))
@@ -259,7 +270,7 @@ constructor(
         _positionDs.value = progression.calculateElapsedPositionMs().msToDs()
         // Persist progress when pausing so the user never loses their place.
         if (!progression.isPlaying) {
-            savePlaylistProgress(force = true)
+            saveListeningProgress(force = true)
         }
         // Replace the previous position co-routine with a new one that uses the new
         // state information.
@@ -268,8 +279,8 @@ constructor(
             viewModelScope.launch {
                 while (true) {
                     _positionDs.value = progression.calculateElapsedPositionMs().msToDs()
-                    // Throttled progress save while playing from a playlist.
-                    savePlaylistProgress(force = false)
+                    // Throttled progress save while playing from a playlist/folder.
+                    saveListeningProgress(force = false)
                     // Wait a deci-second for the next position tick.
                     delay(100)
                 }
@@ -509,12 +520,37 @@ constructor(
     }
 
     /**
-     * Persist the current song/position for the active playlist parent.
+     * Play [folder] from the last saved song/position, or from the start if none is stored.
+     */
+    fun playFromLastProgress(folder: SongFolder) {
+        val progress = folderProgressStore.get(folder.key)
+        val song = progress?.let { p -> folder.songs.find { it.uid == p.songUid } }
+        if (progress == null || song == null) {
+            L.d("No valid last progress for folder ${folder.key}, starting from beginning")
+            pendingResumePositionMs = null
+            play(folder)
+            return
+        }
+        val maxPos = (song.durationMs - 500L).coerceAtLeast(0L)
+        val positionMs = progress.positionMs.coerceIn(0L, maxPos)
+        L.d("Resuming folder ${folder.key} at $song @ ${positionMs}ms")
+        pendingResumePositionMs = positionMs
+        activeFolderKey = folder.key
+        playImpl(commandFactory.songFrom(song, folder.songs, ShuffleMode.OFF))
+    }
+
+    /** Whether [folder] has a saved last-progress that still points at a song in the list. */
+    fun hasLastProgress(folder: SongFolder): Boolean {
+        val progress = folderProgressStore.get(folder.key) ?: return false
+        return folder.songs.any { it.uid == progress.songUid }
+    }
+
+    /**
+     * Persist the current song/position for the active playlist parent or folder.
      *
      * @param force When false, writes are rate-limited to [PROGRESS_SAVE_INTERVAL_MS].
      */
-    private fun savePlaylistProgress(force: Boolean) {
-        val playlist = playbackManager.parent as? Playlist ?: return
+    private fun saveListeningProgress(force: Boolean) {
         val song = playbackManager.currentSong ?: return
         val now = System.currentTimeMillis()
         if (!force && now - lastProgressSaveMs < PROGRESS_SAVE_INTERVAL_MS) return
@@ -527,7 +563,32 @@ constructor(
             } else {
                 positionMs
             }
-        playlistProgressStore.set(playlist.uid, PlaylistProgress(song.uid, capped))
+        val progress = PlaylistProgress(song.uid, capped)
+        val playlist = playbackManager.parent as? Playlist
+        if (playlist != null) {
+            playlistProgressStore.set(playlist.uid, progress)
+            return
+        }
+        val folderKey = activeFolderKey ?: return
+        folderProgressStore.set(folderKey, progress)
+    }
+
+    /**
+     * Play a [SongFolder] from the beginning (records folder progress while playing).
+     */
+    fun play(folder: SongFolder) {
+        L.d("Playing folder ${folder.key} (${folder.songs.size} songs)")
+        activeFolderKey = folder.key
+        playImpl(commandFactory.songs(folder.songs, ShuffleMode.OFF))
+    }
+
+    /**
+     * Play [song] within [folder] as the surrounding queue (records folder progress).
+     */
+    fun play(song: Song, folder: SongFolder) {
+        L.d("Playing $song from folder ${folder.key}")
+        activeFolderKey = folder.key
+        playImpl(commandFactory.songFrom(song, folder.songs, ShuffleMode.OFF))
     }
 
     /**
@@ -537,6 +598,7 @@ constructor(
      */
     fun play(songs: List<Song>) {
         L.d("Playing ${songs.size} songs")
+        activeFolderKey = null
         playImpl(commandFactory.songs(songs, ShuffleMode.OFF))
     }
 
@@ -548,6 +610,8 @@ constructor(
      */
     fun play(song: Song, queue: List<Song>) {
         L.d("Playing $song from a ${queue.size}-song list")
+        // Bare list play is not folder-tracked unless callers use [play(song, folder)].
+        activeFolderKey = null
         playImpl(commandFactory.songFrom(song, queue, ShuffleMode.OFF))
     }
 
@@ -558,6 +622,7 @@ constructor(
      */
     fun shuffle(songs: List<Song>) {
         L.d("Shuffling ${songs.size} songs")
+        activeFolderKey = null
         playImpl(commandFactory.songs(songs, ShuffleMode.ON))
     }
 

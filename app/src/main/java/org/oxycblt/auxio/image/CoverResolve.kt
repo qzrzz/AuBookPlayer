@@ -23,9 +23,11 @@ import androidx.annotation.ColorInt
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.image.coil.StackCoverComposition
 import org.oxycblt.auxio.image.coil.TextCoverRequest
+import org.oxycblt.auxio.music.SongFolder
 import org.oxycblt.auxio.util.getColorCompat
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
+import org.oxycblt.musikr.covers.CoverCollection
 
 /**
  * Coil request data for a song cover, falling back to the playlist cover when the song has none.
@@ -102,6 +104,62 @@ fun playlistTextCoverRequest(
     return TextCoverRequest(
         text = text,
         seed = playlist.uid.toString().hashCode(),
+        backgroundColor = backgroundColor,
+        foregroundColor = foregroundColor,
+    )
+}
+
+/**
+ * Coil request data for a folder cover:
+ * 1. User-chosen custom cover if present
+ * 2. Stacked album art when songs have covers
+ * 3. Generated text cover from shared title words / folder name
+ */
+fun resolveFolderCoverData(
+    context: Context,
+    folder: SongFolder,
+    cornerRadiusRatio: Float = 0f,
+    @ColorInt backgroundColor: Int = context.coverBackgroundColor(),
+    @ColorInt foregroundColor: Int = context.coverForegroundColor(),
+    customCover: FolderCustomCover? = null,
+): Any {
+    customCover?.let {
+        return it
+    }
+    val covers = CoverCollection.from(folder.songs.mapNotNull { it.cover })
+    if (covers.covers.isNotEmpty()) {
+        return StackCoverComposition(
+            covers,
+            cornerRadiusRatio,
+            folder.key.hashCode(),
+            backgroundColor,
+        )
+    }
+    return folderTextCoverRequest(folder, backgroundColor, foregroundColor)
+}
+
+/** Build a [TextCoverRequest] for a folder with no album art. */
+fun folderTextCoverRequest(
+    folder: SongFolder,
+    @ColorInt backgroundColor: Int,
+    @ColorInt foregroundColor: Int,
+): TextCoverRequest {
+    val titles =
+        folder.songs
+            .asSequence()
+            .take(10)
+            .map { it.name.raw }
+            .filter { it.isNotBlank() }
+            .toList()
+    val text =
+        derivePlaylistCoverText(titles).ifEmpty {
+            folder.name.filter { it.isLetterOrDigit() }.take(4).ifEmpty {
+                folder.name.take(4).ifEmpty { "?" }
+            }
+        }
+    return TextCoverRequest(
+        text = text,
+        seed = folder.key.hashCode(),
         backgroundColor = backgroundColor,
         foregroundColor = foregroundColor,
     )

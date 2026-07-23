@@ -33,7 +33,6 @@ import androidx.appcompat.widget.Toolbar
 import androidx.core.view.updatePadding
 import androidx.dynamicanimation.animation.SpringForce
 import androidx.fragment.app.activityViewModels
-import androidx.fragment.app.viewModels
 import dagger.hilt.android.AndroidEntryPoint
 import kotlin.math.abs
 import org.oxycblt.auxio.R
@@ -43,14 +42,12 @@ import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
-import org.oxycblt.auxio.playback.queue.QueueViewModel
 import org.oxycblt.auxio.playback.state.RepeatMode
 import org.oxycblt.auxio.playback.ui.StyledSeekBar
 import org.oxycblt.auxio.playback.ui.stepper.Direction
 import org.oxycblt.auxio.playback.ui.stepper.StepperOverlay
 import org.oxycblt.auxio.playback.ui.swiper.CarouselTransformer
 import org.oxycblt.auxio.playback.ui.swiper.CoverPagerAdapter
-import org.oxycblt.auxio.playback.ui.swiper.UserAwarePagerCallback
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collect
 import org.oxycblt.auxio.util.collectImmediately
@@ -84,10 +81,7 @@ class PlaybackPanelFragment :
     private val detailModel: DetailViewModel by activityViewModels()
     private val listModel: ListViewModel by activityViewModels()
     private val musicModel: MusicViewModel by activityViewModels()
-    private val queueModel: QueueViewModel by viewModels()
     private var equalizerLauncher: ActivityResultLauncher<Intent>? = null
-    private var userAwarePagerCallback: UserAwarePagerCallback? = null
-    private var currentPagerPosition = 0
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         FragmentPlaybackPanelBinding.inflate(inflater)
@@ -119,13 +113,8 @@ class PlaybackPanelFragment :
 
         binding.playbackPager?.apply {
             adapter = coverPagerAdapter
-            userAwarePagerCallback =
-                UserAwarePagerCallback(this) {
-                        // Posting the queue goto command prevents the seekbar pos from desyncing
-                        // from the song's duration, which creates a visual flicker in the seekbar.
-                        post { queueModel.goto(it) }
-                    }
-                    .also { it.attach() }
+            // Disable cover swipe for prev/next — only skip buttons change tracks.
+            isUserInputEnabled = false
             setPageTransformer(CarouselTransformer())
             recycler().apply {
                 // Make it possible to collapse the bottom sheet from the ViewPager's touch area.
@@ -243,7 +232,6 @@ class PlaybackPanelFragment :
         binding.playbackArtist.isSelected = false
         binding.playbackAlbum?.isSelected = false
         binding.playbackToolbar.setOnMenuItemClickListener(null)
-        userAwarePagerCallback?.release()
         binding.playbackPager?.adapter = null
     }
 

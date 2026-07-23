@@ -53,11 +53,13 @@ import org.oxycblt.auxio.home.tabs.Tab
 import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.list.SelectionFragment
 import org.oxycblt.auxio.list.menu.Menu
+import org.oxycblt.auxio.music.FolderDecision
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
+import org.oxycblt.auxio.music.SongFolder
 import org.oxycblt.auxio.playback.PlaybackDecision
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.ui.FadingToolbarOffsetListener
@@ -90,6 +92,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
     private var getImageLauncher: ActivityResultLauncher<String>? = null
     private var pendingImportTarget: Playlist? = null
     private var pendingCoverPlaylist: Playlist? = null
+    private var pendingCoverFolder: SongFolder? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -128,13 +131,21 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         getImageLauncher =
             registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
                 val playlist = pendingCoverPlaylist
+                val folder = pendingCoverFolder
                 pendingCoverPlaylist = null
-                if (uri == null || playlist == null) {
-                    L.w("No URI/playlist for cover picker")
-                    return@registerForActivityResult
+                pendingCoverFolder = null
+                when {
+                    uri == null -> L.w("No URI returned from cover picker")
+                    playlist != null -> {
+                        L.d("Received cover URI $uri for $playlist")
+                        musicModel.setPlaylistCover(playlist, uri)
+                    }
+                    folder != null -> {
+                        L.d("Received cover URI $uri for folder ${folder.key}")
+                        musicModel.setFolderCover(folder, uri)
+                    }
+                    else -> L.w("No playlist/folder pending for cover picker")
                 }
-                L.d("Received cover URI $uri for $playlist")
-                musicModel.setPlaylistCover(playlist, uri)
             }
 
         // --- UI SETUP ---
@@ -186,6 +197,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         collectImmediately(listModel.selected, ::updateSelection)
         collectImmediately(musicModel.indexingState, ::updateIndexerState)
         collect(musicModel.playlistDecision.flow, ::handlePlaylistDecision)
+        collect(musicModel.folderDecision.flow, ::handleFolderDecision)
         collectImmediately(musicModel.playlistMessage.flow, ::handlePlaylistMessage)
         collect(playbackModel.playbackDecision.flow, ::handlePlaybackDecision)
     }
@@ -399,6 +411,19 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 }
             }
         findNavController().navigateSafe(directions)
+    }
+
+    private fun handleFolderDecision(decision: FolderDecision?) {
+        if (decision == null) return
+        when (decision) {
+            is FolderDecision.SetCover -> {
+                L.d("Setting cover for folder ${decision.folder.key}")
+                pendingCoverFolder = decision.folder
+                requireNotNull(getImageLauncher) { "Image picker launcher was not available" }
+                    .launch("image/*")
+                musicModel.folderDecision.consume()
+            }
+        }
     }
 
     private fun handlePlaylistMessage(message: PlaylistMessage?) {
