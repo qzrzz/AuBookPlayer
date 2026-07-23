@@ -164,37 +164,64 @@ function commitAndTagGit(newVersionName, newVersionCode) {
 }
 
 /**
- * 通过 Gradle 构建 Release APK
+ * 通过 Gradle 编译 Release APK，并由脚本生成规范名称副本 AuBookPlayer-vX.Y.Z.apk
  *
- * @returns {string} 返回编译生成的 Release APK 文件绝对路径
+ * @param {string} newVersionName 新版本名称 (例如 "5.2.0")
+ * @returns {string} 返回准备发布的规范名称 APK 绝对路径
  */
-function buildReleaseApk() {
+function buildReleaseApk(newVersionName) {
   console.log(chalk.bold.blue('\n🔨 [2/4] 正在使用 Gradle 编译 Release APK (./gradlew assembleRelease)...'));
 
   runCommand('./gradlew assembleRelease', 'Gradle 编译 Release APK 失败');
 
-  // 寻找生成的 APK 路径
+  // 寻找生成的 APK 输出目录
   const apkDir = path.join(ROOT_DIR, 'app', 'build', 'outputs', 'apk', 'release');
   if (!fs.existsSync(apkDir)) {
     console.error(chalk.red(`✖ 找不到 APK 构建输出目录: ${apkDir}`));
     process.exit(1);
   }
 
-  // 获取 apk 文件
+  // 获取生成的原始 apk 文件
   const apkFiles = fs
     .readdirSync(apkDir)
     .filter((file) => file.endsWith('.apk'))
     .map((file) => path.join(apkDir, file));
 
   if (apkFiles.length === 0) {
-    console.error(chalk.red('✖ 构建输出路径中未找到 APK 文件！'));
+    console.error(chalk.red('✖ 构建输出路径中未找到任何 APK 文件！'));
     process.exit(1);
   }
 
-  const apkPath = apkFiles[0];
-  console.log(chalk.bold.green(`✔ APK 编译构建完成！`));
-  console.log(chalk.cyan(`   路径: ${apkPath}`));
-  return apkPath;
+  const rawApkPath = apkFiles[0];
+  const targetApkName = `AuBookPlayer-v${newVersionName}.apk`;
+  const targetApkPath = path.join(apkDir, targetApkName);
+
+  // 在发布脚本层将编译好的 APK 复制一份为规范的 Release 名称
+  fs.copyFileSync(rawApkPath, targetApkPath);
+
+  console.log(chalk.bold.green(`✔ APK 编译完成，发布脚本已生成规范命名文件！`));
+  console.log(chalk.cyan(`   规范文件名: ${targetApkName}`));
+  console.log(chalk.cyan(`   上传路径:   ${targetApkPath}`));
+  return targetApkPath;
+}
+
+/**
+ * 自动尝试从 Git 远程 origin 地址中解析 GitHub 仓库名 (例如: owner/repo)
+ *
+ * @returns {string | null} 解析成功返回 "owner/repo"，失败返回 null
+ */
+function getGithubRepo() {
+  try {
+    const remoteUrl = execSync('git remote get-url origin', { encoding: 'utf-8', cwd: ROOT_DIR }).trim();
+    // 匹配如 git@github.com-qzrzz:qzrzz/AuBookPlayer.git 或 https://github.com/qzrzz/AuBookPlayer.git
+    const match = remoteUrl.match(/[:/]([^/]+\/[^/.]+)(?:\.git)?$/);
+    if (match) {
+      return match[1];
+    }
+  } catch {
+    // 忽略获取失败
+  }
+  return null;
 }
 
 /**
@@ -214,14 +241,18 @@ function publishGithubRelease(tagName, apkPath) {
     return;
   }
 
+  // 自动获取 --repo 参数以防止 SSH 别名导致 gh 找不到默认仓库
+  const repoName = getGithubRepo();
+  const repoFlag = repoName ? `--repo "${repoName}" ` : '';
+
   // 执行 gh release create
-  const ghCommand = `gh release create "${tagName}" "${apkPath}" --title "${tagName}" --generate-notes`;
+  const ghCommand = `gh release create "${tagName}" "${apkPath}" ${repoFlag}--title "${tagName}" --generate-notes`;
   const success = runCommand(ghCommand, 'GitHub Release 创建或上传失败', true);
 
   if (success) {
     console.log(chalk.bold.green(`✔ GitHub Release ${tagName} 已经创建成功并挂载 APK 附件！`));
   } else {
-    console.log(chalk.yellow(`ℹ 您稍后也可以手动运行: gh release create "${tagName}" "${apkPath}" --title "${tagName}" --generate-notes`));
+    console.log(chalk.yellow(`ℹ 您稍后也可以手动运行:\n  gh release create "${tagName}" "${apkPath}" ${repoFlag}--title "${tagName}" --generate-notes`));
   }
 }
 
@@ -282,7 +313,7 @@ function main() {
   commitAndTagGit(newVersionName, newVersionCode);
 
   // 5. 编译 Release APK
-  const apkPath = buildReleaseApk();
+  const apkPath = buildReleaseApk(newVersionName);
 
   // 6. 发布到 GitHub Release 并上传 APK
   publishGithubRelease(`v${newVersionName}`, apkPath);
