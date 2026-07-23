@@ -43,6 +43,7 @@ import org.oxycblt.auxio.ForegroundServiceNotification
 import org.oxycblt.auxio.IntegerTable
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.image.BitmapProvider
+import org.oxycblt.auxio.image.FolderCoverStore
 import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.image.PlaylistCoverStore
 import org.oxycblt.auxio.music.resolve
@@ -75,6 +76,7 @@ private constructor(
     private val bitmapProvider: BitmapProvider,
     private val imageSettings: ImageSettings,
     private val playlistCoverStore: PlaylistCoverStore,
+    private val folderCoverStore: FolderCoverStore,
     private val mediaSessionInterface: MediaSessionInterface,
 ) : PlaybackStateManager.Listener, ImageSettings.Listener {
 
@@ -85,6 +87,7 @@ private constructor(
         private val bitmapProvider: BitmapProvider,
         private val imageSettings: ImageSettings,
         private val playlistCoverStore: PlaylistCoverStore,
+        private val folderCoverStore: FolderCoverStore,
         private val mediaSessionInterface: MediaSessionInterface,
     ) {
         fun create(context: Context, foregroundListener: ForegroundListener) =
@@ -95,6 +98,7 @@ private constructor(
                 bitmapProvider,
                 imageSettings,
                 playlistCoverStore,
+                folderCoverStore,
                 mediaSessionInterface,
             )
     }
@@ -120,11 +124,22 @@ private constructor(
         }
         coverJob =
             coverScope.launch {
-                playlistCoverStore.updates.collect { uid ->
-                    val parent = playbackManager.parent as? Playlist
-                    if (parent != null && parent.uid == uid) {
-                        L.d("Playlist cover updated for current parent, refreshing session art")
-                        updateMediaMetadata(playbackManager.currentSong, parent)
+                launch {
+                    playlistCoverStore.updates.collect { uid ->
+                        val parent = playbackManager.parent as? Playlist
+                        if (parent != null && parent.uid == uid) {
+                            L.d("Playlist cover updated for current parent, refreshing session art")
+                            updateMediaMetadata(playbackManager.currentSong, parent)
+                        }
+                    }
+                }
+                launch {
+                    folderCoverStore.updates.collect { key ->
+                        val currentSong = playbackManager.currentSong
+                        if (currentSong != null && currentSong.path.directory.toString() == key) {
+                            L.d("Folder cover updated for current song's folder, refreshing session art")
+                            updateMediaMetadata(currentSong, playbackManager.parent)
+                        }
                     }
                 }
             }
@@ -409,7 +424,8 @@ private class PlaybackNotification(
     sessionToken: MediaSessionCompat.Token,
 ) : ForegroundServiceNotification(context, CHANNEL_INFO) {
     init {
-        setSmallIcon(R.drawable.ic_auxio_24)
+        // App play-mark silhouette (status-bar small icon; monochrome alpha mask).
+        setSmallIcon(R.drawable.ic_notification)
         setCategory(NotificationCompat.CATEGORY_TRANSPORT)
         setShowWhen(false)
         setSilent(true)

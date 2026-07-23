@@ -18,6 +18,7 @@
  
 package org.oxycblt.auxio.detail.list
 
+import android.net.Uri
 import android.text.format.Formatter
 import android.view.View
 import android.view.ViewGroup
@@ -125,7 +126,8 @@ class SongPropertyViewHolder private constructor(private val binding: ItemSongPr
             }
             is SongProperty.Value.ItemPath -> {
                 val path = property.value.path
-                binding.propertyValue.setText(path.resolve(context))
+                val resolvedRaw = path.resolve(context)
+                binding.propertyValue.setText(formatHumanReadablePath(resolvedRaw))
             }
             is SongProperty.Value.Size -> {
                 val size = property.value.sizeBytes
@@ -171,4 +173,31 @@ class SongPropertyViewHolder private constructor(private val binding: ItemSongPr
                     oldItem.name == newItem.name && oldItem.value == newItem.value
             }
     }
+}
+
+/**
+ * 格式化输出人类可读的路径文本，解开 %xx URL 编码并清理冗长 SAF schema。
+ */
+private fun formatHumanReadablePath(raw: String): String {
+    val decoded = try {
+        Uri.decode(raw)
+    } catch (e: Exception) {
+        raw
+    }
+
+    if (decoded.startsWith("content://")) {
+        val documentId = when {
+            decoded.contains("/document/") -> decoded.substringAfter("/document/")
+            decoded.contains("/tree/") -> decoded.substringAfter("/tree/")
+            else -> decoded
+        }
+        val cleanPath = when {
+            documentId.startsWith("primary:") -> documentId.removePrefix("primary:")
+            documentId.contains(":") -> documentId.substringAfter(":")
+            else -> documentId
+        }
+        return if (cleanPath.startsWith("/")) cleanPath else "/$cleanPath"
+    }
+
+    return decoded
 }

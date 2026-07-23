@@ -53,6 +53,13 @@ interface Cache {
  */
 interface MutableCache : Cache {
     /**
+     * Read the last complete set of cached files, if this cache supports snapshots.
+     *
+     * Snapshot entries can restore a usable library before a normal filesystem refresh completes.
+     */
+    suspend fun snapshot(): List<CachedFile> = emptyList()
+
+    /**
      * Write a [CachedFile] to the cache.
      *
      * This should commit the metadata to the repository in such a way that it can be retrieved

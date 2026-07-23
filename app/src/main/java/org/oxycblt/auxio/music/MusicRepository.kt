@@ -24,7 +24,6 @@ import java.util.UUID
 import javax.inject.Inject
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.yield
 import org.oxycblt.auxio.image.covers.SettingCovers
@@ -407,6 +406,24 @@ constructor(
         val storage = Storage(cache, covers, storedPlaylists)
         val interpretation = Interpretation(nameFactory, separators)
         val config = Config(fs, storage, interpretation)
+        if (withCache && library == null) {
+            L.d("Restoring cached library")
+            val cachedLibrary =
+                try {
+                    Musikr.new(context, config).restore()
+                } catch (e: CancellationException) {
+                    throw e
+                } catch (e: Exception) {
+                    // A stale or partially-written snapshot must never prevent the authoritative
+                    // filesystem refresh below from repairing the cache.
+                    L.w(e, "Could not restore cached library")
+                    null
+                }
+            if (cachedLibrary != null) {
+                L.d("Emitting cached library")
+                emitLibrary(cachedLibrary)
+            }
+        }
         L.d("Running index...")
         val start = System.currentTimeMillis()
         val result = Musikr.new(context, config).run(::emitIndexingProgress)

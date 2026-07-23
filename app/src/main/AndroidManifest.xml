@@ -21,7 +21,12 @@
         android:name="android.permission.ACCESS_NETWORK_STATE"
         tools:node="remove" />
 
-    <queries />
+    <!-- Package visibility (API 30+): allow resolving the system equalizer control panel. -->
+    <queries>
+        <intent>
+            <action android:name="android.media.action.DISPLAY_AUDIO_EFFECT_CONTROL_PANEL" />
+        </intent>
+    </queries>
 
     <application
         android:name=".Auxio"

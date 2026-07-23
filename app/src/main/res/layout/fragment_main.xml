@@ -108,17 +108,19 @@
                 android:layout_height="@dimen/size_touchable_large"
                 android:contentDescription="@string/desc_queue_bar">
 
+                <!-- Drag handle overlays the top; title/more stay optically centered in the bar. -->
                 <com.google.android.material.bottomsheet.BottomSheetDragHandleView
                     android:id="@+id/queue_handle"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:paddingBottom="@dimen/spacing_medium"
+                    android:paddingTop="@dimen/spacing_tiny"
+                    android:paddingBottom="0dp"
                     app:layout_constraintTop_toTopOf="parent" />
 
                 <TextView
                     android:id="@+id/queue_title"
                     android:layout_width="0dp"
-                    android:layout_height="wrap_content"
+                    android:layout_height="0dp"
                     android:layout_marginStart="@dimen/spacing_medium"
                     android:layout_marginEnd="@dimen/spacing_small"
                     android:ellipsize="end"
@@ -128,10 +130,24 @@
                     android:textAppearance="?attr/textAppearanceLabelLargeEmphasized"
                     android:textColor="?attr/colorOnSurfaceVariant"
                     app:layout_constraintBottom_toBottomOf="parent"
-                    app:layout_constraintEnd_toStartOf="@+id/queue_more"
+                    app:layout_constraintEnd_toStartOf="@+id/queue_sort"
                     app:layout_constraintStart_toStartOf="parent"
-                    app:layout_constraintTop_toBottomOf="@+id/queue_handle"
+                    app:layout_constraintTop_toTopOf="parent"
                     tools:text="Playlist · 12 songs" />
+
+                <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                    android:id="@+id/queue_sort"
+                    style="@style/Widget.Auxio.Button.Icon.Small"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/spacing_tiny"
+                    android:contentDescription="@string/lbl_sort"
+                    android:visibility="gone"
+                    app:icon="@drawable/ic_sort_24"
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toStartOf="@+id/queue_more"
+                    app:layout_constraintTop_toTopOf="parent"
+                    tools:visibility="visible" />
 
                 <org.oxycblt.auxio.ui.RippleFixMaterialButton
                     android:id="@+id/queue_more"
@@ -142,10 +158,11 @@
                     android:contentDescription="@string/lbl_more"
                     android:visibility="gone"
                     app:icon="@drawable/ic_more_24"
-                    app:layout_constraintBottom_toBottomOf="@+id/queue_title"
+                    app:layout_constraintBottom_toBottomOf="parent"
                     app:layout_constraintEnd_toEndOf="parent"
-                    app:layout_constraintTop_toTopOf="@+id/queue_title"
+                    app:layout_constraintTop_toTopOf="parent"
                     tools:visibility="visible" />
+
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 

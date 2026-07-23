@@ -314,17 +314,24 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
         alpha = if (isEnabled || isSelected) 1f else 0.5f
     }
 
+    /**
+     * 刷新播放指示器的透明度与遮罩效果
+     * 当正在播放时依然保留封面作为背景显示，并在封面上覆盖 60% 不透明度的色彩遮罩与播放指示图标
+     *
+     * @param playbackIndicator 播放指示器对象
+     */
     private fun invalidatePlaybackIndicatorAlpha(playbackIndicator: PlaybackIndicator) {
-        // Occasionally content can bleed through the rounded corners and result in a seam
-        // on the playing indicator, prevent that from occurring by disabling the visibility of
-        // all views below the playback indicator.
+        // 设置播放指示器背景遮罩的 alpha 为 60% 不透明度 (153/255)
+        playbackIndicator.view.background?.alpha = (255 * 0.6f).toInt()
         for (child in children) {
             child.alpha =
                 when (child) {
-                    // Selection badge is above the playback indicator, do nothing
+                    // 勾选徽章在播放指示器上方，保持其固有 alpha
                     selectionBadge -> child.alpha
+                    // 正在播放时显示指示器视图（包含 60% 遮罩和图标），未播放时隐藏
                     playbackIndicator.view -> if (isSelected) 1f else 0f
-                    else -> if (isSelected) 0f else 1f
+                    // 封面及底层视图在播放时依然保持显示 (alpha = 1f)，作为背景
+                    else -> 1f
                 }
         }
     }
@@ -359,6 +366,7 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
                     fallbackPlaylist,
                     responsiveCornerRatio(size),
                     customCover = fallbackPlaylist?.let { playlistCoverStore.getCustomCover(it.uid) },
+                    folderCustomCover = folderCoverStore.getCustomCover(song.path.directory.toString()),
                 )
             },
             context.getString(R.string.desc_album_cover, song.album.name),
@@ -618,6 +626,7 @@ constructor(context: Context, attrs: AttributeSet? = null, @AttrRes defStyleAttr
                 }
         }
         currentShapeAppearance = to
+        playbackIndicator?.let { invalidatePlaybackIndicatorAlpha(it) }
     }
 
     /**

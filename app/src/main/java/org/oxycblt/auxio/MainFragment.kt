@@ -673,6 +673,7 @@ class MainFragment :
                 }
             }
 
+        val sort = binding.queueSort
         binding.queueTitle.text = header.title
         binding.queueHandleWrapper?.contentDescription = getString(header.descRes)
         ViewCompat.setAccessibilityPaneTitle(binding.queueSheet, header.title)
@@ -684,7 +685,18 @@ class MainFragment :
             more.isVisible = false
             more.setOnClickListener(null)
         }
+
+        if (pagerQueue.queue.isNotEmpty()) {
+            sort.isVisible = true
+            sort.setOnClickListener {
+                binding.exploreNavHost.findNavController().navigate(R.id.queue_sort_dialog)
+            }
+        } else {
+            sort.isVisible = false
+            sort.setOnClickListener(null)
+        }
     }
+
 
     private fun handlePanel(panel: OpenPanel?) {
         if (panel == null) return

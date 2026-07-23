@@ -83,6 +83,9 @@ class AboutFragment : ViewBindingFragment<FragmentAboutBinding>() {
         binding.aboutFeedbackX.setOnClickListener {
             requireContext().openInBrowser(LINK_X)
         }
+        binding.aboutFeedbackBilibili.setOnClickListener {
+            requireContext().openInBrowser(LINK_BILIBILI)
+        }
 
         // VIEWMODEL SETUP
         collectImmediately(musicModel.statistics, ::updateStatistics)
@@ -123,5 +126,6 @@ class AboutFragment : ViewBindingFragment<FragmentAboutBinding>() {
         const val LINK_NEW_ISSUE = "$LINK_SOURCE/issues/new"
         const val LINK_PROFILE = "https://qzrzz.com"
         const val LINK_X = "https://x.com/qzrz256"
+        const val LINK_BILIBILI = "https://space.bilibili.com/3546636494047957"
     }
 }

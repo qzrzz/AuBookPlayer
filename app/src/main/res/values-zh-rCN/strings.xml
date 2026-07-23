@@ -24,6 +24,7 @@
     <string name="lbl_reset_play_history">重置播放记录</string>
     <string name="lng_play_history_reset">已清除播放记录</string>
     <string name="lng_equalizer_desc">调节系统音效与均衡器设置</string>
+    <string name="err_equalizer_no_session">请先开始播放，再打开均衡器</string>
     <string name="lbl_repeat_mode">重复播放</string>
     <string name="lbl_repeat_off">关闭</string>
     <string name="lbl_repeat_all">列表循环</string>
@@ -53,6 +54,7 @@
     <string name="lbl_original_project">原项目 Auxio</string>
     <string name="lbl_author_name">Qzrzz</string>
     <string name="lbl_x">X (Twitter)</string>
+    <string name="lbl_bilibili">哔哩哔哩</string>
     <string name="set_root_title">设置</string>
     <string name="set_ui">外观和感觉</string>
     <string name="set_theme">主题</string>

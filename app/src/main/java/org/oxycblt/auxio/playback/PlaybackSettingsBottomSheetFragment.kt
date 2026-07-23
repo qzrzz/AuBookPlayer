@@ -5,6 +5,8 @@ import android.content.Intent
 import android.media.audiofx.AudioEffect
 import android.os.Bundle
 import android.view.LayoutInflater
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.fragment.app.activityViewModels
 import dagger.hilt.android.AndroidEntryPoint
 import org.oxycblt.auxio.R
@@ -14,6 +16,7 @@ import org.oxycblt.auxio.ui.ViewBindingSideSheetDialogFragment
 import org.oxycblt.auxio.ui.accent.AccentCustomizeDialog
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.showToast
+import timber.log.Timber as L
 
 /**
  * Right-side drawer for quick playback settings, plus a shortcut to the look-and-feel color scheme.
@@ -23,6 +26,20 @@ class PlaybackSettingsBottomSheetFragment :
     ViewBindingSideSheetDialogFragment<DialogPlaybackSettingsBinding>() {
 
     private val playbackModel: PlaybackViewModel by activityViewModels()
+
+    /**
+     * AudioEffect control panels must be started with startActivityForResult (no result is used).
+     * Plain [startActivity] is ignored or fails silently on many devices.
+     */
+    private var equalizerLauncher: ActivityResultLauncher<Intent>? = null
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        equalizerLauncher =
+            registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+                // System equalizer returns no useful result.
+            }
+    }
 
     override fun onCreateBinding(inflater: LayoutInflater) =
         DialogPlaybackSettingsBinding.inflate(inflater)
@@ -83,6 +100,10 @@ class PlaybackSettingsBottomSheetFragment :
         super.onResume()
         // Accent may have been changed (and activity recreated) while the drawer was open.
         binding?.settingAccentStatus?.text = getString(uiSettings.accent.name)
+    }
+
+    override fun onDestroyBinding(binding: DialogPlaybackSettingsBinding) {
+        equalizerLauncher = null
     }
 
     private fun updateRepeat(repeatMode: RepeatMode) {
@@ -150,13 +171,37 @@ class PlaybackSettingsBottomSheetFragment :
     }
 
     private fun openEqualizer() {
+        // Make sure the system equalizer can attach to our audio path (even while paused).
+        playbackModel.ensureAudioEffectSession()
+
+        val sessionId = playbackModel.currentAudioSessionId
+        if (sessionId == null || sessionId == 0) {
+            L.w("No audio session for equalizer")
+            requireContext().showToast(R.string.err_equalizer_no_session)
+            return
+        }
+
         val equalizerIntent =
             Intent(AudioEffect.ACTION_DISPLAY_AUDIO_EFFECT_CONTROL_PANEL)
-                .putExtra(AudioEffect.EXTRA_AUDIO_SESSION, playbackModel.currentAudioSessionId)
+                .putExtra(AudioEffect.EXTRA_AUDIO_SESSION, sessionId)
+                .putExtra(AudioEffect.EXTRA_PACKAGE_NAME, requireContext().packageName)
                 .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
+
+        val launcher = equalizerLauncher
+        if (launcher == null) {
+            L.w("Equalizer launcher not registered")
+            requireContext().showToast(R.string.err_no_app)
+            return
+        }
+
         try {
-            startActivity(equalizerIntent)
+            // Required API: panel intents must be started for result.
+            launcher.launch(equalizerIntent)
         } catch (_: ActivityNotFoundException) {
+            requireContext().showToast(R.string.err_no_app)
+        } catch (e: Exception) {
+            L.e("Failed to open equalizer")
+            L.e(e.stackTraceToString())
             requireContext().showToast(R.string.err_no_app)
         }
     }

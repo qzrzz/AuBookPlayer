@@ -120,6 +120,27 @@ interface Cover {
 }
 
 /**
+ * A lightweight cover restored from cached metadata.
+ *
+ * The backing cover is resolved only when image loading actually opens it, keeping filesystem
+ * checks out of the startup-critical library restoration path.
+ */
+class LazyCover(
+    override val id: String,
+    private val covers: Covers<out Cover>,
+) : Cover {
+    override suspend fun open(): InputStream? =
+        when (val result = covers.obtain(id)) {
+            is CoverResult.Hit -> result.cover.open()
+            is CoverResult.Miss -> null
+        }
+
+    override fun equals(other: Any?) = other is LazyCover && id == other.id
+
+    override fun hashCode() = id.hashCode()
+}
+
+/**
  * A cover that can be opened as a [ParcelFileDescriptor].
  *
  * This more or less implies that the cover is explicitly stored on-device somewhere.

@@ -83,6 +83,24 @@ sealed interface Volume {
 
         override fun resolveName(context: Context) = uri.toString()
     }
+
+    /** Lightweight handles used while restoring files from the metadata cache. */
+    data class CachedInternal(
+        override val mediaStoreName: String?,
+        override val components: Components?,
+    ) : Internal {
+        override fun resolveName(context: Context) =
+            mediaStoreName ?: components?.toString().orEmpty()
+    }
+
+    data class CachedExternal(
+        override val id: String?,
+        override val mediaStoreName: String?,
+        override val components: Components?,
+    ) : External {
+        override fun resolveName(context: Context) =
+            mediaStoreName ?: id ?: components?.toString().orEmpty()
+    }
 }
 
 /**

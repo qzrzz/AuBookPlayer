@@ -1,9 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="24dp"
     android:height="24dp"
-    android:tint="@android:color/white"
+    android:tint="?attr/colorControlNormal"
     android:viewportWidth="24"
     android:viewportHeight="24">
+    <!-- White geometry is recolored by android:tint (same pattern as other UI icons).
+         Notification small-icon uses alpha as a mask, so white strokes still work there. -->
     <path
         android:fillColor="@android:color/transparent"
         android:pathData="M13 4l4 4m-4-4v13m0 0l-3 3-3-3 3-3"

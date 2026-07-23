@@ -650,4 +650,10 @@
         android:name="org.oxycblt.auxio.music.locations.LocationsDialog"
         android:label="music_locations_dialog"
         tools:layout="@layout/dialog_music_locations" />
+
+    <dialog
+        android:id="@+id/queue_sort_dialog"
+        android:name="org.oxycblt.auxio.playback.queue.QueueSortDialog"
+        android:label="queue_sort_dialog"
+        tools:layout="@layout/dialog_sort" />
 </navigation>

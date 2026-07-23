@@ -159,6 +159,7 @@
                         android:layout_height="wrap_content"
                         android:text="@string/lbl_original_project"
                         app:drawableStartCompat="@drawable/ic_auxio_24"
+                        app:drawableTint="?attr/colorControlNormal"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"
                         app:layout_constraintTop_toBottomOf="@+id/about_licenses" />
@@ -253,7 +254,19 @@
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:text="@string/lbl_x"
-                        app:drawableStartCompat="@drawable/ic_about_24"
+                        app:drawableStartCompat="@drawable/ic_x_24"
+                        app:drawableTint="?attr/colorControlNormal"
+                        app:layout_constraintEnd_toEndOf="parent"
+                        app:layout_constraintStart_toStartOf="parent"
+                        app:layout_constraintTop_toBottomOf="@+id/about_licenses" />
+
+                    <TextView
+                        android:id="@+id/about_feedback_bilibili"
+                        style="@style/Widget.Auxio.TextView.Icon.Clickable"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/lbl_bilibili"
+                        app:drawableStartCompat="@drawable/ic_bilibili_24"
                         app:drawableTint="?attr/colorControlNormal"
                         app:layout_constraintEnd_toEndOf="parent"
                         app:layout_constraintStart_toStartOf="parent"

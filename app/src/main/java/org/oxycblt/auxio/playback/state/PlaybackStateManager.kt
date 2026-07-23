@@ -69,6 +69,12 @@ interface PlaybackStateManager {
     /** The audio session ID of the internal player. Null if no internal player exists. */
     val currentAudioSessionId: Int?
 
+    /**
+     * Ensure the system AudioEffect session is open for the current player (for the equalizer
+     * panel). No-op if no player is registered.
+     */
+    fun ensureAudioEffectSession()
+
     /** The current playback speed multiplier. */
     val playbackSpeed: Float
 
@@ -186,6 +192,14 @@ interface PlaybackStateManager {
      * @param shuffled Whether to shuffle the queue or not.
      */
     fun shuffled(shuffled: Boolean)
+
+    /**
+     * 重新对当前队列进行排序
+     *
+     * @param newQueue 重新排序后的曲目列表
+     */
+    fun reorderQueue(newQueue: List<Song>)
+
 
     /**
      * Acknowledges that an event has happened that modified the state held by the current
@@ -392,6 +406,11 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
     override val currentAudioSessionId: Int?
         get() = stateHolder?.audioSessionId
 
+    @Synchronized
+    override fun ensureAudioEffectSession() {
+        stateHolder?.ensureAudioEffectSession()
+    }
+
     private var _playbackSpeed = 1.0f
 
     override val playbackSpeed: Float
@@ -539,6 +558,14 @@ class PlaybackStateManagerImpl @Inject constructor() : PlaybackStateManager {
         L.d("Reordering queue [shuffled=$shuffled]")
         stateHolder.shuffled(shuffled)
     }
+
+    @Synchronized
+    override fun reorderQueue(newQueue: List<Song>) {
+        val stateHolder = stateHolder ?: return
+        L.d("Reordering queue with new song order (${newQueue.size} songs)")
+        stateHolder.reorderQueue(newQueue, StateAck.QueueReordered)
+    }
+
 
     // --- INTERNAL PLAYER FUNCTIONS ---
 

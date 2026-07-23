@@ -58,3 +58,8 @@ sealed interface FSUpdate {
 interface AddedMs {
     suspend fun resolve(): Long?
 }
+
+/** An already-resolved added timestamp used by cached filesystem entries. */
+data class CachedAddedMs(private val value: Long) : AddedMs {
+    override suspend fun resolve() = value
+}

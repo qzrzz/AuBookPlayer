@@ -23,11 +23,14 @@ import android.util.Log
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.coroutineScope
+import org.oxycblt.musikr.covers.LazyCover
 import org.oxycblt.musikr.pipeline.EvaluateStep
 import org.oxycblt.musikr.pipeline.ExploreStep
 import org.oxycblt.musikr.pipeline.Explored
 import org.oxycblt.musikr.pipeline.ExtractStep
 import org.oxycblt.musikr.pipeline.Extracted
+import org.oxycblt.musikr.pipeline.RawPlaylist
+import org.oxycblt.musikr.pipeline.RawSong
 import org.oxycblt.musikr.util.merge
 import org.oxycblt.musikr.util.tryAsyncWith
 
@@ -45,6 +48,14 @@ import org.oxycblt.musikr.util.tryAsyncWith
  *    to fork and modify the source code.
  */
 interface Musikr {
+    /**
+     * Restore a library from the last complete metadata snapshot.
+     *
+     * Returns null when no usable snapshot exists. Callers should follow this with [run] to
+     * validate the snapshot against the filesystem.
+     */
+    suspend fun restore(): MutableLibrary?
+
     /**
      * Start loading music using the given config and the configuration provided earlier.
      *
@@ -70,7 +81,7 @@ interface Musikr {
                 config,
                 ExploreStep.from(context, config),
                 ExtractStep.from(context, config),
-                EvaluateStep.new(context, config, config.interpretation),
+                EvaluateStep.new(config, config.interpretation),
             )
     }
 }
@@ -113,6 +124,30 @@ private class MusikrImpl(
     private val extractStep: ExtractStep,
     private val evaluateStep: EvaluateStep,
 ) : Musikr {
+    override suspend fun restore(): MutableLibrary? {
+        val cachedFiles = config.storage.cache.snapshot()
+        if (cachedFiles.isEmpty()) return null
+
+        val extracted = Channel<Extracted>(Channel.UNLIMITED)
+        for (cachedFile in cachedFiles) {
+            val audio = cachedFile.audio ?: continue
+            extracted.send(
+                RawSong(
+                    cachedFile.file,
+                    audio.properties,
+                    audio.tags,
+                    audio.coverId?.let { LazyCover(it, config.storage.covers) },
+                    cachedFile.addedMs,
+                )
+            )
+        }
+        for (playlist in config.storage.storedPlaylists.read()) {
+            extracted.send(RawPlaylist(playlist))
+        }
+        extracted.close()
+        return evaluateStep.evaluate(extracted)
+    }
+
     override suspend fun run(onProgress: suspend (IndexingProgress) -> Unit) = coroutineScope {
         onProgress(IndexingProgress.Songs(0, 0))
         val start = System.currentTimeMillis()

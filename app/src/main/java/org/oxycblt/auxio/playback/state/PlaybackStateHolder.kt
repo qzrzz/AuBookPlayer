@@ -51,6 +51,12 @@ interface PlaybackStateHolder {
     /** The current audio session ID of the audio player. */
     val audioSessionId: Int
 
+    /**
+     * Ensure the system AudioEffect control session is open for [audioSessionId] so the equalizer
+     * panel can attach. Default no-op for non-Exo holders.
+     */
+    fun ensureAudioEffectSession() {}
+
     /** Applies a completely new playback state to the holder. */
     fun newPlayback(command: PlaybackCommand)
 
@@ -131,6 +137,15 @@ interface PlaybackStateHolder {
      * @param shuffled Whether the queue should be shuffled.
      */
     fun shuffled(shuffled: Boolean)
+
+    /**
+     * 重新对当前队列进行排序，同时保持当前播放进度与播放状态不变
+     *
+     * @param newQueue 重新排序后的曲目列表
+     * @param ack 状态确认回调
+     */
+    fun reorderQueue(newQueue: List<Song>, ack: StateAck.QueueReordered) {}
+
 
     /**
      * Handle a deferred playback action.

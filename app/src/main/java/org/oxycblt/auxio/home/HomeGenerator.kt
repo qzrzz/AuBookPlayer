@@ -58,6 +58,9 @@ interface HomeGenerator {
 
         fun invalidateMusic(type: MusicType, instructions: UpdateInstructions)
 
+        /** Called after every affected tab has been updated from one library generation. */
+        fun invalidateLibraryReady() {}
+
         fun invalidateTabs()
     }
 
@@ -148,6 +151,10 @@ private class HomeGeneratorImpl(
         if (changes.userLibrary && library != null) {
             L.d("Refreshing playlists")
             invalidator.invalidateMusic(MusicType.PLAYLISTS, UpdateInstructions.Diff)
+        }
+
+        if (library != null) {
+            invalidator.invalidateLibraryReady()
         }
     }
 

@@ -211,6 +211,7 @@
     <string name="lbl_github">Make an issue on GitHub</string>
     <string name="lbl_email">Send an email</string>
     <string name="lbl_x">X (Twitter)</string>
+    <string name="lbl_bilibili">Bilibili</string>
     <string name="lbl_donate">Donate</string>
     <string name="lbl_supporters">Supporters</string>
 
@@ -376,6 +377,7 @@
     <string name="err_share_too_large">This is too large to share</string>
     <string name="err_share_failed">Unable to share this</string>
     <string name="err_no_app">No app found that can handle this task</string>
+    <string name="err_equalizer_no_session">Start playback first, then open the equalizer</string>
     <!-- No folders in the "Music Folders" setting -->
     <string name="err_bad_location">This folder is not supported</string>
     <string name="lbl_no_folders">No folders</string>

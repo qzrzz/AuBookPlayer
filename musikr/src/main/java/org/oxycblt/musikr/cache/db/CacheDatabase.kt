@@ -32,11 +32,13 @@ import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 import org.oxycblt.musikr.tag.Date
 import org.oxycblt.musikr.util.correctWhitespace
 import org.oxycblt.musikr.util.splitEscaped
 
-@Database(entities = [CachedFileData::class], version = 70, exportSchema = false)
+@Database(entities = [CachedFileData::class], version = 71, exportSchema = false)
 internal abstract class CacheDatabase : RoomDatabase() {
     abstract fun readDao(): CacheReadDao
 
@@ -49,8 +51,23 @@ internal abstract class CacheDatabase : RoomDatabase() {
                     CacheDatabase::class.java,
                     "music_cache.db",
                 )
+                .addMigrations(MIGRATION_70_71)
                 .fallbackToDestructiveMigration(true)
                 .build()
+
+        private val MIGRATION_70_71 =
+            object : Migration(70, 71) {
+                override fun migrate(db: SupportSQLiteDatabase) {
+                    db.execSQL("ALTER TABLE CachedFileData ADD COLUMN filePath TEXT")
+                    db.execSQL("ALTER TABLE CachedFileData ADD COLUMN fileMimeType TEXT")
+                    db.execSQL("ALTER TABLE CachedFileData ADD COLUMN fileSize INTEGER")
+                    db.execSQL("ALTER TABLE CachedFileData ADD COLUMN volumeKind INTEGER")
+                    db.execSQL("ALTER TABLE CachedFileData ADD COLUMN volumeMediaStoreName TEXT")
+                    db.execSQL("ALTER TABLE CachedFileData ADD COLUMN volumePath TEXT")
+                    db.execSQL("ALTER TABLE CachedFileData ADD COLUMN volumeExternalId TEXT")
+                    db.execSQL("ALTER TABLE CachedFileData ADD COLUMN volumeThirdPartyUri TEXT")
+                }
+            }
     }
 }
 
@@ -83,6 +100,14 @@ internal data class CachedFileData(
     @PrimaryKey val uri: Uri,
     val modifiedMs: Long,
     val addedMs: Long,
+    val filePath: String?,
+    val fileMimeType: String?,
+    val fileSize: Long?,
+    val volumeKind: Int?,
+    val volumeMediaStoreName: String?,
+    val volumePath: String?,
+    val volumeExternalId: String?,
+    val volumeThirdPartyUri: Uri?,
     val mimeType: String?,
     val durationMs: Long?,
     val bitrateKbps: Int?,

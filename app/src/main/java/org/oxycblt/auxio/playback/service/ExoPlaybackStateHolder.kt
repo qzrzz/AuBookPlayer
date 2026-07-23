@@ -57,6 +57,7 @@ import org.oxycblt.auxio.playback.SkipHeadTail
 import org.oxycblt.auxio.playback.persist.PersistenceRepository
 import org.oxycblt.auxio.playback.replaygain.ReplayGainAudioProcessor
 import org.oxycblt.auxio.playback.state.DeferredPlayback
+import org.oxycblt.auxio.playback.SongPlayProgressStore
 import org.oxycblt.auxio.playback.state.PlaybackCommand
 import org.oxycblt.auxio.playback.state.PlaybackStateHolder
 import org.oxycblt.auxio.playback.state.PlaybackStateManager
@@ -82,6 +83,7 @@ class ExoPlaybackStateHolder(
     private val musicRepository: MusicRepository,
     private val imageSettings: ImageSettings,
     private val playlistSkipSettings: PlaylistSkipSettings,
+    private val songPlayProgressStore: SongPlayProgressStore,
 ) :
     PlaybackStateHolder,
     Player.Listener,
@@ -125,6 +127,11 @@ class ExoPlaybackStateHolder(
         skipTailWatchJob?.cancel()
         skipJob.cancel()
         saveJob.cancel()
+        // Close any open AudioEffect session so the system equalizer detaches cleanly.
+        if (openAudioEffectSession) {
+            broadcastAudioEffectAction(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION)
+            openAudioEffectSession = false
+        }
         playbackManager.unregisterStateHolder(this)
         musicRepository.removeUpdateListener(this)
         player.removeListener(this)
@@ -288,8 +295,8 @@ class ExoPlaybackStateHolder(
         }
         val target = startIndex ?: player.currentTimeline.getFirstWindowIndex(command.shuffled)
         player.playbackParameters = PlaybackParameters(currentSpeed)
-        // Start after the configured head-skip when playing from a playlist.
-        val startPositionMs = resolveSkip(command.song ?: command.queue.getOrNull(target)).headMs
+        // Start from saved listening progress if available, otherwise fallback to playlist head-skip.
+        val startPositionMs = resolveInitialPosition(command.song ?: command.queue.getOrNull(target))
         player.seekTo(target, if (startPositionMs > 0) startPositionMs else C.TIME_UNSET)
         player.prepare()
         player.play()
@@ -309,6 +316,26 @@ class ExoPlaybackStateHolder(
         playbackManager.ack(this, StateAck.QueueReordered)
         deferSave()
     }
+
+    override fun reorderQueue(newQueue: List<Song>, ack: StateAck.QueueReordered) {
+        if (newQueue.isEmpty()) return
+        val currentSong = playbackManager.currentSong
+        val newIndex = if (currentSong != null) {
+            val idx = newQueue.indexOfFirst { it.uid == currentSong.uid }
+            if (idx != -1) idx else 0
+        } else 0
+
+        val currentPosMs = player.currentPosition
+        val isPlaying = player.isPlaying
+
+        player.setMediaItems(newQueue.map { it.buildMediaItem() }, newIndex, currentPosMs)
+        if (isPlaying && player.playbackState != Player.STATE_ENDED) {
+            player.play()
+        }
+        playbackManager.ack(this, ack)
+        deferSave()
+    }
+
 
     override fun next() {
         // Replicate the old pseudo-circular queue behavior when no repeat option is implemented.
@@ -356,7 +383,9 @@ class ExoPlaybackStateHolder(
         }
 
         val trueIndex = indices[index]
-        player.seekTo(trueIndex, C.TIME_UNSET) // Handles remaining custom logic
+        val songToPlay = playbackManager.queue.getOrNull(index)
+        val initialPosMs = resolveInitialPosition(songToPlay)
+        player.seekTo(trueIndex, if (initialPosMs > 0) initialPosMs else C.TIME_UNSET)
         if (!playbackSettings.rememberPause) {
             player.play()
         }
@@ -508,19 +537,10 @@ class ExoPlaybackStateHolder(
             // Mark that we have started playing so that the notification can now be posted.
             L.d("Player has started playing")
             sessionOngoing = true
-            if (!openAudioEffectSession) {
-                // Convention to start an audioeffect session on play/pause rather than
-                // start/stop
-                L.d("Opening audio effect session")
-                broadcastAudioEffectAction(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION)
-                openAudioEffectSession = true
-            }
-        } else if (openAudioEffectSession) {
-            // Make sure to close the audio session when we stop playback.
-            L.d("Closing audio effect session")
-            broadcastAudioEffectAction(AudioEffect.ACTION_CLOSE_AUDIO_EFFECT_CONTROL_SESSION)
-            openAudioEffectSession = false
         }
+        // Keep the AudioEffect session open once opened until the holder is released.
+        // Closing it on every pause makes the system equalizer panel open empty / do nothing.
+        ensureAudioEffectSession()
     }
 
     override fun onPlaybackStateChanged(playbackState: Int) {
@@ -575,6 +595,19 @@ class ExoPlaybackStateHolder(
         L.e(error.stackTraceToString())
         player.prepare()
         playbackManager.next()
+    }
+
+    /**
+     * Open an AudioEffect control session if one is not already open. Safe to call while paused —
+     * the equalizer UI needs an open session to attach to this player's [audioSessionId].
+     */
+    override fun ensureAudioEffectSession() {
+        if (openAudioEffectSession) return
+        // audioSessionId is 0 before the player has an audio track; still open once we have media.
+        if (player.audioSessionId == 0 && player.currentMediaItem == null) return
+        L.d("Opening audio effect session [id=${player.audioSessionId}]")
+        broadcastAudioEffectAction(AudioEffect.ACTION_OPEN_AUDIO_EFFECT_CONTROL_SESSION)
+        openAudioEffectSession = true
     }
 
     private fun broadcastAudioEffectAction(event: String) {
@@ -669,15 +702,34 @@ class ExoPlaybackStateHolder(
      * Seek past the configured intro if we are still near the absolute start of the track.
      * Does not jump forward when the user (or restore) is already mid-track.
      */
+    /**
+     * Fresh start of a track: apply saved listening progress (if any and not completed) or head-skip.
+     */
     private fun applySkipHeadIfNeeded() {
         val song = player.currentMediaItem?.song ?: return
-        val skip = resolveSkip(song)
-        if (skip.headMs <= 0L) return
-        // Only auto-skip when effectively at the beginning of the file.
-        if (player.currentPosition < 500L) {
-            L.d("Skipping head ${skip.headSeconds}s on $song")
-            player.seekTo(skip.headMs)
+        // Only apply when effectively at the beginning of the track.
+        if (player.currentPosition < 1000L) {
+            val initialPosMs = resolveInitialPosition(song)
+            if (initialPosMs > 0L) {
+                L.d("Applying initial position ${initialPosMs}ms for $song")
+                player.seekTo(initialPosMs)
+                return
+            }
         }
+    }
+
+    /**
+     * Resolve the initial playback position for [song].
+     * Prefers saved listening progress if available and not completed (< 80%),
+     * otherwise falls back to the configured playlist head-skip.
+     */
+    private fun resolveInitialPosition(song: Song?): Long {
+        if (song == null) return 0L
+        val savedProgress = songPlayProgressStore.maxPositionMs(song.uid)
+        if (savedProgress > 0L && !songPlayProgressStore.isCompleted(song)) {
+            return savedProgress
+        }
+        return resolveSkip(song).headMs
     }
 
     /**
@@ -772,6 +824,7 @@ class ExoPlaybackStateHolder(
         private val musicRepository: MusicRepository,
         private val imageSettings: ImageSettings,
         private val playlistSkipSettings: PlaylistSkipSettings,
+        private val songPlayProgressStore: SongPlayProgressStore,
     ) {
         fun create(): ExoPlaybackStateHolder {
             // Since Auxio is a music player, only specify an audio renderer to save
@@ -817,6 +870,7 @@ class ExoPlaybackStateHolder(
                 musicRepository,
                 imageSettings,
                 playlistSkipSettings,
+                songPlayProgressStore,
             )
         }
     }

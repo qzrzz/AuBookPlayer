@@ -27,7 +27,11 @@ import org.oxycblt.musikr.cache.Cache
 import org.oxycblt.musikr.cache.CacheResult
 import org.oxycblt.musikr.cache.CachedFile
 import org.oxycblt.musikr.cache.MutableCache
+import org.oxycblt.musikr.fs.CachedAddedMs
+import org.oxycblt.musikr.fs.Components
 import org.oxycblt.musikr.fs.File
+import org.oxycblt.musikr.fs.Path
+import org.oxycblt.musikr.fs.Volume
 import org.oxycblt.musikr.metadata.Properties
 import org.oxycblt.musikr.tag.parse.ParsedTags
 
@@ -49,47 +53,19 @@ class DBCache private constructor(private val readDao: CacheReadDao) : Cache {
         if (dbSong.modifiedMs != file.modifiedMs) {
             return CacheResult.Stale(file, dbSong.addedMs)
         }
-        val song =
-            CachedFile(
-                file,
-                dbSong.mimeType?.let {
-                    Audio(
-                        Properties(
-                            dbSong.mimeType,
-                            dbSong.durationMs!!,
-                            dbSong.bitrateKbps!!,
-                            dbSong.sampleRateHz!!,
-                        ),
-                        ParsedTags(
-                            musicBrainzId = dbSong.musicBrainzId,
-                            name = dbSong.name,
-                            sortName = dbSong.sortName,
-                            durationMs = dbSong.durationMs,
-                            track = dbSong.track,
-                            disc = dbSong.disc,
-                            subtitle = dbSong.subtitle,
-                            date = dbSong.date,
-                            albumMusicBrainzId = dbSong.albumMusicBrainzId,
-                            albumName = dbSong.albumName,
-                            albumSortName = dbSong.albumSortName,
-                            releaseTypes = dbSong.releaseTypes!!,
-                            artistMusicBrainzIds = dbSong.artistMusicBrainzIds!!,
-                            artistNames = dbSong.artistNames!!,
-                            artistSortNames = dbSong.artistSortNames!!,
-                            albumArtistMusicBrainzIds = dbSong.albumArtistMusicBrainzIds!!,
-                            albumArtistNames = dbSong.albumArtistNames!!,
-                            albumArtistSortNames = dbSong.albumArtistSortNames!!,
-                            genreNames = dbSong.genreNames!!,
-                            replayGainTrackAdjustment = dbSong.replayGainTrackAdjustment,
-                            replayGainAlbumAdjustment = dbSong.replayGainAlbumAdjustment,
-                        ),
-                        coverId = dbSong.coverId,
-                    )
-                },
-                addedMs = dbSong.addedMs,
-            )
-        return CacheResult.Hit(song)
+        return CacheResult.Hit(requireNotNull(dbSong.toCachedFile(file)))
     }
+
+    suspend fun snapshot(): List<CachedFile> {
+        val rows = readDao.selectAllSongs()
+        val snapshot = rows.mapNotNull(CachedFileData::toCachedFile)
+        // Never expose a partially migrated or partially written snapshot. Showing no cached
+        // library is preferable to flashing incomplete tabs while the authoritative scan runs.
+        return snapshot.takeIf { it.size == rows.size } ?: emptyList()
+    }
+
+    suspend fun needsSnapshotFields(uri: Uri): Boolean =
+        mappingLock.withLock { mapping?.get(uri)?.filePath == null }
 
     companion object {
         /**
@@ -115,14 +91,38 @@ class DBCache private constructor(private val readDao: CacheReadDao) : Cache {
 class MutableDBCache
 private constructor(private val inner: DBCache, private val writeDao: CacheWriteDao) :
     MutableCache {
-    override suspend fun read(file: File) = inner.read(file)
+    override suspend fun read(file: File): CacheResult {
+        val result = inner.read(file)
+        if (result is CacheResult.Hit && inner.needsSnapshotFields(file.uri)) {
+            // Backfill the filesystem fields retained by the v70 -> v71 migration. Metadata cache
+            // hits are normally not rewritten by the indexing pipeline.
+            write(result.file)
+        }
+        return result
+    }
+
+    override suspend fun snapshot() = inner.snapshot()
 
     override suspend fun write(cachedFile: CachedFile) {
+        val volume = cachedFile.file.path.volume
         val dbSong =
             CachedFileData(
                 uri = cachedFile.file.uri,
                 modifiedMs = cachedFile.file.modifiedMs,
                 addedMs = cachedFile.addedMs,
+                filePath = cachedFile.file.path.components.toString(),
+                fileMimeType = cachedFile.file.mimeType,
+                fileSize = cachedFile.file.size,
+                volumeKind =
+                    when (volume) {
+                        is Volume.Internal -> VOLUME_INTERNAL
+                        is Volume.External -> VOLUME_EXTERNAL
+                        is Volume.ThirdParty -> VOLUME_THIRD_PARTY
+                    },
+                volumeMediaStoreName = volume.mediaStoreName,
+                volumePath = volume.components?.toString(),
+                volumeExternalId = (volume as? Volume.External)?.id,
+                volumeThirdPartyUri = (volume as? Volume.ThirdParty)?.uri,
                 mimeType = cachedFile.audio?.properties?.mimeType,
                 durationMs = cachedFile.audio?.properties?.durationMs,
                 bitrateKbps = cachedFile.audio?.properties?.bitrateKbps,
@@ -157,6 +157,10 @@ private constructor(private val inner: DBCache, private val writeDao: CacheWrite
     }
 
     companion object {
+        private const val VOLUME_INTERNAL = 0
+        private const val VOLUME_EXTERNAL = 1
+        private const val VOLUME_THIRD_PARTY = 2
+
         /**
          * Create a new instance of [MutableDBCache] from the given [context].
          *
@@ -171,4 +175,72 @@ private constructor(private val inner: DBCache, private val writeDao: CacheWrite
             return MutableDBCache(DBCache.from(db), db.writeDao())
         }
     }
+}
+
+private fun CachedFileData.toCachedFile(file: File? = null): CachedFile? {
+    val restoredFile =
+        file
+            ?: run {
+                val path = filePath ?: return null
+                val fileMimeType = fileMimeType ?: return null
+                val fileSize = fileSize ?: return null
+                val volume =
+                    when (volumeKind) {
+                        0 ->
+                            Volume.CachedInternal(
+                                volumeMediaStoreName,
+                                volumePath?.let(Components::parseUnix),
+                            )
+                        1 ->
+                            Volume.CachedExternal(
+                                volumeExternalId,
+                                volumeMediaStoreName,
+                                volumePath?.let(Components::parseUnix),
+                            )
+                        2 -> volumeThirdPartyUri?.let(Volume::ThirdParty) ?: return null
+                        else -> return null
+                    }
+                File(
+                    uri = uri,
+                    path = Path(volume, Components.parseUnix(path)),
+                    addedMs = CachedAddedMs(addedMs),
+                    modifiedMs = modifiedMs,
+                    mimeType = fileMimeType,
+                    size = fileSize,
+                    parent = null,
+                )
+            }
+    return CachedFile(
+        restoredFile,
+        mimeType?.let {
+            Audio(
+                Properties(it, durationMs!!, bitrateKbps!!, sampleRateHz!!),
+                ParsedTags(
+                    musicBrainzId = musicBrainzId,
+                    name = name,
+                    sortName = sortName,
+                    durationMs = durationMs,
+                    track = track,
+                    disc = disc,
+                    subtitle = subtitle,
+                    date = date,
+                    albumMusicBrainzId = albumMusicBrainzId,
+                    albumName = albumName,
+                    albumSortName = albumSortName,
+                    releaseTypes = releaseTypes!!,
+                    artistMusicBrainzIds = artistMusicBrainzIds!!,
+                    artistNames = artistNames!!,
+                    artistSortNames = artistSortNames!!,
+                    albumArtistMusicBrainzIds = albumArtistMusicBrainzIds!!,
+                    albumArtistNames = albumArtistNames!!,
+                    albumArtistSortNames = albumArtistSortNames!!,
+                    genreNames = genreNames!!,
+                    replayGainTrackAdjustment = replayGainTrackAdjustment,
+                    replayGainAlbumAdjustment = replayGainAlbumAdjustment,
+                ),
+                coverId = coverId,
+            )
+        },
+        addedMs,
+    )
 }

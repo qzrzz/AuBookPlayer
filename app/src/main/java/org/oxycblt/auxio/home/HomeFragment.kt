@@ -204,7 +204,7 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         collect(detailModel.toShow.flow, ::handleShow)
         collect(listModel.menu.flow, ::handleMenu)
         collectImmediately(listModel.selected, ::updateSelection)
-        collectImmediately(musicModel.indexingState, ::updateIndexerState)
+        collectImmediately(homeModel.libraryReady, musicModel.indexingState, ::updateIndexerState)
         collect(musicModel.playlistDecision.flow, ::handlePlaylistDecision)
         collect(musicModel.folderDecision.flow, ::handleFolderDecision)
         collect(musicModel.albumDecision.flow, ::handleAlbumDecision)
@@ -327,10 +327,11 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
         homeModel.chooseMusicLocations.consume()
     }
 
-    private fun updateIndexerState(state: IndexingState?) {
+    private fun updateIndexerState(libraryReady: Boolean, state: IndexingState?) {
         val binding = requireBinding()
         when (state) {
             is IndexingState.Completed -> {
+                binding.homePager.isInvisible = state.error != null && !libraryReady
                 binding.homeIndexingContainer.isInvisible = state.error == null
                 binding.homeIndexingProgress.isInvisible = state.error != null
                 binding.homeIndexingError.isInvisible = state.error == null
@@ -344,9 +345,12 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 }
             }
             is IndexingState.Indexing -> {
-                binding.homeIndexingContainer.isInvisible = false
+                // With a complete cached library, keep the content stable and refresh silently.
+                // Without one, hide every tab until the first generation is committed as a unit.
+                binding.homePager.isInvisible = !libraryReady
+                binding.homeIndexingContainer.isInvisible = libraryReady
                 binding.homeIndexingProgress.apply {
-                    isInvisible = false
+                    isInvisible = libraryReady
                     when (state.progress) {
                         is IndexingProgress.Songs -> {
                             isIndeterminate = false
@@ -361,7 +365,13 @@ class HomeFragment : SelectionFragment<FragmentHomeBinding>() {
                 binding.homeIndexingError.isInvisible = true
             }
             null -> {
-                binding.homeIndexingContainer.isInvisible = true
+                // The service can attach a moment after the Fragment. Keep the initial empty
+                // adapters hidden during that gap so startup does not flash empty tabs.
+                binding.homePager.isInvisible = !libraryReady
+                binding.homeIndexingContainer.isInvisible = libraryReady
+                binding.homeIndexingProgress.isInvisible = libraryReady
+                binding.homeIndexingProgress.isIndeterminate = true
+                binding.homeIndexingError.isInvisible = true
             }
         }
     }

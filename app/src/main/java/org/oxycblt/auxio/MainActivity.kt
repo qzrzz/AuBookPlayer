@@ -68,6 +68,9 @@ class MainActivity : AppCompatActivity() {
     override fun onResume() {
         super.onResume()
 
+        // Block skip prev/next briefly so touches from re-entering the app don't change tracks.
+        playbackModel.onAppResumed()
+
         startService(
             Intent(this, AuxioService::class.java)
                 .setAction(AuxioService.ACTION_START)

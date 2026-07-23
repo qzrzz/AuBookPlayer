@@ -59,6 +59,7 @@ constructor(
     @ApplicationContext private val context: Context,
     private val imageLoader: ImageLoader,
     private val playlistCoverStore: PlaylistCoverStore,
+    private val folderCoverStore: FolderCoverStore,
 ) {
     /**
      * An extension of [Disposable] with an additional [Target] to deliver the final [Bitmap] to.
@@ -118,6 +119,7 @@ constructor(
                 song,
                 fallbackPlaylist,
                 customCover = fallbackPlaylist?.let { playlistCoverStore.getCustomCover(it.uid) },
+                folderCustomCover = folderCoverStore.getCustomCover(song.path.directory.toString()),
             )
 
         if (coverData == null) {

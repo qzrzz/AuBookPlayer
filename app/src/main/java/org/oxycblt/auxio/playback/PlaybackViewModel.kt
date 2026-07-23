@@ -18,6 +18,7 @@
  
 package org.oxycblt.auxio.playback
 
+import android.os.SystemClock
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import dagger.hilt.android.lifecycle.HiltViewModel
@@ -73,12 +74,17 @@ constructor(
     private val lastSessionProgressStore: LastSessionProgressStore,
     private val musicRepository: MusicRepository,
     private val skipHeadTailAnalyzer: SkipHeadTailAnalyzer,
-) : ViewModel(), PlaybackStateManager.Listener, PlaybackSettings.Listener {
+) : ViewModel(), PlaybackStateManager.Listener, PlaybackSettings.Listener, ListSettings.Listener {
     private var lastPositionJob: Job? = null
     private var analyzeJob: Job? = null
     /** Pending seek applied once new playlist/folder playback has started (last-progress resume). */
     private var pendingResumePositionMs: Long? = null
     private var lastProgressSaveMs = 0L
+    /**
+     * [SystemClock.elapsedRealtime] after which in-app skip prev/next is allowed. Armed when the
+     * activity returns to the foreground to reduce accidental track changes.
+     */
+    private var skipTracksAllowedAfterElapsedMs: Long = 0L
     private val _activeFolder = MutableStateFlow<SongFolder?>(null)
     /**
      * When non-null, playback is from this folder (folders are not [MusicParent]s). Progress is
@@ -182,9 +188,18 @@ constructor(
     val currentAudioSessionId: Int?
         get() = playbackManager.currentAudioSessionId
 
+    /**
+     * Open the system AudioEffect session if needed so the equalizer control panel can attach to
+     * this app's audio path.
+     */
+    fun ensureAudioEffectSession() {
+        playbackManager.ensureAudioEffectSession()
+    }
+
     init {
         playbackManager.addListener(this)
         playbackSettings.registerListener(this)
+        listSettings.registerListener(this)
         refreshPlaylistSkip()
         viewModelScope.launch {
             playlistSkipSettings.updates.collect { uid ->
@@ -199,7 +214,47 @@ constructor(
     override fun onCleared() {
         playbackManager.removeListener(this)
         playbackSettings.unregisterListener(this)
+        listSettings.unregisterListener(this)
     }
+
+    override fun onAlbumSongSortChanged() {
+        val album = parent.value as? Album ?: return
+        val sortedSongs = listSettings.albumSongSort.songs(album.songs)
+        playbackManager.reorderQueue(sortedSongs)
+    }
+
+    override fun onFolderSongSortChanged() {
+        val folder = activeFolder.value ?: return
+        val sortedSongs = listSettings.folderSongSort.songs(folder.songs)
+        playbackManager.reorderQueue(sortedSongs)
+    }
+
+    override fun onArtistSongSortChanged() {
+        val artist = parent.value as? Artist ?: return
+        val sortedSongs = listSettings.artistSongSort.songs(artist.songs)
+        playbackManager.reorderQueue(sortedSongs)
+    }
+
+    override fun onGenreSongSortChanged() {
+        val genre = parent.value as? Genre ?: return
+        val sortedSongs = listSettings.genreSongSort.songs(genre.songs)
+        playbackManager.reorderQueue(sortedSongs)
+    }
+
+    override fun onPlaylistSortChanged() {
+        val playlist = parent.value as? Playlist ?: return
+        val sortedSongs = listSettings.playlistSort.songs(playlist.songs)
+        playbackManager.reorderQueue(sortedSongs)
+    }
+
+    override fun onSongSortChanged() {
+        if (parent.value == null && activeFolder.value == null) {
+            val songs = musicRepository.library?.songs ?: emptyList()
+            val sortedSongs = listSettings.songSort.songs(songs)
+            playbackManager.reorderQueue(sortedSongs)
+        }
+    }
+
 
     private fun refreshPlaylistSkip() {
         val playlist = playbackManager.parent as? Playlist
@@ -306,16 +361,34 @@ constructor(
     // --- PLAYING FUNCTIONS ---
 
     fun play(song: Song, with: PlaySong) {
+        if (resumeIfAlreadyCurrent(song)) return
         L.d("Playing $song with $with")
         playWithImpl(song, with, ShuffleMode.IMPLICIT)
     }
 
     fun playExplicit(song: Song, with: PlaySong) {
+        if (resumeIfAlreadyCurrent(song)) return
         playWithImpl(song, with, ShuffleMode.OFF)
     }
 
     fun shuffleExplicit(song: Song, with: PlaySong) {
+        if (resumeIfAlreadyCurrent(song)) return
         playWithImpl(song, with, ShuffleMode.ON)
+    }
+
+    /**
+     * If [song] is already the current track, do not restart from the beginning. Resume when
+     * paused; leave position alone when already playing.
+     *
+     * @return true if the click was handled as "already current".
+     */
+    private fun resumeIfAlreadyCurrent(song: Song): Boolean {
+        if (playbackManager.currentSong?.uid != song.uid) return false
+        L.d("$song is already current — not restarting from the beginning")
+        if (!playbackManager.progression.isPlaying) {
+            playbackManager.playing(true)
+        }
+        return true
     }
 
     /** Shuffle all songs in the music library. */
@@ -745,6 +818,7 @@ constructor(
      * Play [song] within [folder] as the surrounding queue (records folder progress).
      */
     fun play(song: Song, folder: SongFolder) {
+        if (resumeIfAlreadyCurrent(song)) return
         L.d("Playing $song from folder ${folder.key}")
         _activeFolder.value = folder
         playImpl(commandFactory.songFrom(song, folder.songs, ShuffleMode.OFF))
@@ -768,6 +842,7 @@ constructor(
      * @param queue The full queue of [Song]s (must include [song]).
      */
     fun play(song: Song, queue: List<Song>) {
+        if (resumeIfAlreadyCurrent(song)) return
         L.d("Playing $song from a ${queue.size}-song list")
         // Bare list play is not folder-tracked unless callers use [play(song, folder)].
         _activeFolder.value = null
@@ -834,14 +909,36 @@ constructor(
 
     // --- QUEUE FUNCTIONS ---
 
+    /**
+     * Call when the main activity returns to the foreground. Blocks in-app skip prev/next for
+     * [SKIP_TRACK_GUARD_MS] to avoid accidental touches right after resume.
+     */
+    fun onAppResumed() {
+        skipTracksAllowedAfterElapsedMs = SystemClock.elapsedRealtime() + SKIP_TRACK_GUARD_MS
+        L.d("Skip prev/next guarded for ${SKIP_TRACK_GUARD_MS}ms after resume")
+    }
+
+    private fun canSkipTrack(): Boolean {
+        val now = SystemClock.elapsedRealtime()
+        if (now < skipTracksAllowedAfterElapsedMs) {
+            L.d(
+                "Ignoring skip; ${skipTracksAllowedAfterElapsedMs - now}ms remaining of resume guard"
+            )
+            return false
+        }
+        return true
+    }
+
     /** Skip to the next [Song]. */
     fun next() {
+        if (!canSkipTrack()) return
         L.d("Skipping to next song")
         playbackManager.next()
     }
 
     /** Skip to the previous [Song]. */
     fun prev() {
+        if (!canSkipTrack()) return
         L.d("Skipping to previous song")
         playbackManager.prev()
     }
@@ -1114,6 +1211,8 @@ constructor(
     private companion object {
         private const val STEP_INCREMENT = 10000 // ms
         private const val PROGRESS_SAVE_INTERVAL_MS = 5_000L
+        /** Debounce window for skip prev/next after returning to the app. */
+        private const val SKIP_TRACK_GUARD_MS = 800L
     }
 }
 

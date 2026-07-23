@@ -35,10 +35,11 @@ import org.oxycblt.musikr.covers.CoverCollection
 import org.oxycblt.musikr.tag.Name
 
 /**
- * Coil request data for a song cover, falling back to the playlist cover when the song has none.
+ * Coil request data for a song cover, falling back to folder custom cover or playlist cover when the song has none.
  *
  * @param cornerRadiusRatio Relative corner radius for stack compositions (0–1).
  * @param customCover Optional user-chosen playlist cover used as fallback.
+ * @param folderCustomCover Optional user-chosen folder cover used as fallback when song has no embedded cover.
  */
 fun resolveSongCoverData(
     context: Context,
@@ -46,8 +47,12 @@ fun resolveSongCoverData(
     fallbackPlaylist: Playlist?,
     cornerRadiusRatio: Float = 0f,
     customCover: PlaylistCustomCover? = null,
+    folderCustomCover: FolderCustomCover? = null,
 ): Any? {
     song.cover?.let {
+        return it
+    }
+    folderCustomCover?.let {
         return it
     }
     val playlist = fallbackPlaylist ?: return null

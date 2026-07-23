@@ -130,6 +130,11 @@ constructor(
     val empty: StateFlow<Boolean>
         get() = _empty
 
+    private val _libraryReady = MutableStateFlow(false)
+    /** True after all home tabs have received the same library generation. */
+    val libraryReady: StateFlow<Boolean>
+        get() = _libraryReady
+
     private val _playlistInstructions = MutableEvent<UpdateInstructions>()
     /** Instructions for how to update [genreList] in the UI. */
     val playlistInstructions: Event<UpdateInstructions>
@@ -193,6 +198,10 @@ constructor(
 
     override fun invalidateEmpty() {
         _empty.value = homeGenerator.empty()
+    }
+
+    override fun invalidateLibraryReady() {
+        _libraryReady.value = true
     }
 
     override fun invalidateMusic(type: MusicType, instructions: UpdateInstructions) {
