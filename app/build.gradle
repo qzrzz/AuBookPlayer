@@ -18,8 +18,8 @@ android {
     defaultConfig {
         // 安装包唯一标识 applicationId 设置为 com.qzrzz.aubookplayer
         applicationId "com.qzrzz.aubookplayer"
-        versionName "5.2.2"
-        versionCode 78
+        versionName "5.2.3"
+        versionCode 79
 
         minSdk min_sdk
         // randomly flickers between deprecated and required depending on what mood my gradle is in
