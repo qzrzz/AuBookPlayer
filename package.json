@@ -5,7 +5,8 @@
   "type": "module",
   "scripts": {
     "release": "bun run scripts/release.mjs",
-    "release:minor": "bun run scripts/release.mjs --minor"
+    "release:minor": "bun run scripts/release.mjs --minor",
+    "build:docs": "bun scripts/generate-i18n-site.mjs"
 
   },
   "devDependencies": {

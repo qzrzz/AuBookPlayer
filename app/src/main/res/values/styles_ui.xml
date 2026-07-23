@@ -123,7 +123,10 @@
     </style>
 
     <style name="Widget.Auxio.BottomSheet.Handle" parent="Widget.Material3.BottomSheet.DragHandle">
+        <!-- 减小底部内边距并设置较浅的边框变体颜色 -->
         <item name="android:paddingBottom">0dp</item>
+        <item name="tint">?attr/colorOutlineVariant</item>
+        <item name="android:tint">?attr/colorOutlineVariant</item>
     </style>
 
     <style name="Widget.Auxio.MaterialButtonGroup" parent="Widget.Material3.MaterialButtonGroup">
