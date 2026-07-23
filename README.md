@@ -1,5 +1,9 @@
 # AuBookPlayer | 本地有声书播放器
 
+
+- [https://qzrzz.github.io/AuBookPlayer/](https://qzrzz.github.io/AuBookPlayer/)
+- [下载](https://github.com/qzrzz/AuBookPlayer/releases)
+
 一个简单的 Android 本地有声书播放器。
 
 基于开源音乐播放器 [Auxio](https://github.com/oxygencobalt/Auxio) 改造而来，以适用于播放本地有声书（音频文件）的场景。
