@@ -50,6 +50,8 @@ class CoilModule {
         playlistCustomCoverFetcherFactory: PlaylistCustomCoverFetcher.Factory,
         folderCustomCoverKeyer: FolderCustomCoverFetcher.Keyer,
         folderCustomCoverFetcherFactory: FolderCustomCoverFetcher.Factory,
+        albumCustomCoverKeyer: AlbumCustomCoverFetcher.Keyer,
+        albumCustomCoverFetcherFactory: AlbumCustomCoverFetcher.Factory,
     ) =
         ImageLoader.Builder(context)
             .components {
@@ -67,6 +69,8 @@ class CoilModule {
                 add(playlistCustomCoverFetcherFactory)
                 add(folderCustomCoverKeyer)
                 add(folderCustomCoverFetcherFactory)
+                add(albumCustomCoverKeyer)
+                add(albumCustomCoverFetcherFactory)
             }
             // Use our own crossfade with error drawable support
             .transitionFactory(ErrorCrossfadeTransitionFactory())

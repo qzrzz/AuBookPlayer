@@ -54,7 +54,9 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
     private val args: FolderDetailFragmentArgs by navArgs()
-    private val folderListAdapter = FolderDetailListAdapter(this)
+    @javax.inject.Inject
+    lateinit var songPlayProgressStore: org.oxycblt.auxio.playback.SongPlayProgressStore
+    private val folderListAdapter by lazy { FolderDetailListAdapter(this, songPlayProgressStore) }
     private var getImageLauncher: ActivityResultLauncher<String>? = null
     private var pendingCoverFolder: SongFolder? = null
 
@@ -94,6 +96,9 @@ class FolderDetailFragment : DetailFragment<SongFolder, Song>() {
             ::updatePlayback,
         )
         collect(playbackModel.playbackDecision.flow, ::handlePlaybackDecision)
+        collect(songPlayProgressStore.updates) { uid ->
+            folderListAdapter.notifyProgressChanged(uid)
+        }
     }
 
     override fun onDestroyBinding(binding: FragmentDetailBinding) {

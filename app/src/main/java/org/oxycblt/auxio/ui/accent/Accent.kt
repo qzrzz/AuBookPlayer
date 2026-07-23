@@ -18,7 +18,14 @@
  
 package org.oxycblt.auxio.ui.accent
 
+import android.content.Context
 import android.os.Build
+import android.util.TypedValue
+import androidx.annotation.AttrRes
+import androidx.annotation.ColorInt
+import androidx.appcompat.view.ContextThemeWrapper
+import androidx.core.content.ContextCompat
+import com.google.android.material.R as MR
 import org.oxycblt.auxio.R
 import timber.log.Timber as L
 
@@ -107,6 +114,18 @@ private val accentPrimaryColors =
     )
 
 /**
+ * Preview colors for an [Accent], matching the roles actually used in the UI:
+ * - [primary]: icons, selected text, playing play/pause button
+ * - [primaryContainer]: tonal button fills (skip, paused play/pause, chips)
+ * - [onPrimary]: content drawn on top of [primary] (e.g. checkmark)
+ */
+data class AccentPreviewColors(
+    @ColorInt val primary: Int,
+    @ColorInt val primaryContainer: Int,
+    @ColorInt val onPrimary: Int,
+)
+
+/**
  * The data object for a colored theme to use in the UI. This can be nominally used to gleam some
  * attributes about a given color scheme, but this is not recommended. Attributes are the better
  * option in nearly all cases.
@@ -129,9 +148,25 @@ class Accent private constructor(val index: Int) {
     val blackTheme: Int
         get() = accentBlackThemes[index]
 
-    /** The accent's primary color. */
+    /** The accent's primary color resource. Prefer [previewColors] for UI swatches. */
     val primary: Int
         get() = accentPrimaryColors[index]
+
+    /**
+     * Resolve the colors this accent actually applies to the theme, so picker swatches match
+     * play/pause, skip buttons, and other themed controls.
+     *
+     * @param context Any context (configuration for night mode is taken from it).
+     * @param blackTheme Whether to resolve against the black-background theme variant.
+     */
+    fun previewColors(context: Context, blackTheme: Boolean = false): AccentPreviewColors {
+        val themed = ContextThemeWrapper(context, if (blackTheme) this.blackTheme else theme)
+        return AccentPreviewColors(
+            primary = themed.resolveThemeColor(androidx.appcompat.R.attr.colorPrimary),
+            primaryContainer = themed.resolveThemeColor(MR.attr.colorPrimaryContainer),
+            onPrimary = themed.resolveThemeColor(MR.attr.colorOnPrimary),
+        )
+    }
 
     override fun equals(other: Any?) = other is Accent && index == other.index
 
@@ -171,5 +206,16 @@ class Accent private constructor(val index: Int) {
                 // Disable the option for a dynamic accent on unsupported devices.
                 accentThemes.size - 1
             }
+    }
+}
+
+@ColorInt
+private fun Context.resolveThemeColor(@AttrRes attr: Int): Int {
+    val value = TypedValue()
+    theme.resolveAttribute(attr, value, true)
+    return if (value.resourceId != 0) {
+        ContextCompat.getColor(this, value.resourceId)
+    } else {
+        value.data
     }
 }

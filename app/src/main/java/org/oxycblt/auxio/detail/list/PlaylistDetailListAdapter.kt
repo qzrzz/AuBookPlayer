@@ -43,9 +43,12 @@ import org.oxycblt.auxio.list.recycler.MaterialDragCallback
 import org.oxycblt.auxio.list.recycler.SongViewHolder
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
+import org.oxycblt.auxio.playback.SongPlayProgressStore
+import org.oxycblt.auxio.playback.ui.SongPlayProgressUi
 import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.inflater
+import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import timber.log.Timber as L
@@ -57,8 +60,10 @@ import timber.log.Timber as L
  * @param listener A [DetailListAdapter.Listener] to bind interactions to.
  * @author Alexander Capehart (OxygenCobalt)
  */
-class PlaylistDetailListAdapter(private val listener: Listener) :
-    DetailListAdapter(listener, DIFF_CALLBACK) {
+class PlaylistDetailListAdapter(
+    private val listener: Listener,
+    private val playProgressStore: SongPlayProgressStore,
+) : DetailListAdapter(listener, DIFF_CALLBACK) {
     private var isEditing = false
     /** Playlist used as a cover fallback when a song has no album art. */
     private var playlist: Playlist? = null
@@ -106,13 +111,20 @@ class PlaylistDetailListAdapter(private val listener: Listener) :
         if (payloads.isEmpty()) {
             when (val item = getItem(position)) {
                 is EditHeader -> (holder as EditHeaderViewHolder).bind(item, listener)
-                is Song -> (holder as PlaylistSongViewHolder).bind(item, listener, playlist)
+                is Song ->
+                    (holder as PlaylistSongViewHolder)
+                        .bind(item, listener, playlist, playProgressStore)
             }
         }
 
         if (holder is ViewHolder) {
             holder.updateEditing(isEditing)
         }
+    }
+
+    fun notifyProgressChanged(songUid: Music.UID) {
+        val index = currentList.indexOfFirst { it is Song && it.uid == songUid }
+        if (index >= 0) notifyItemChanged(index)
     }
 
     fun setEditing(editing: Boolean) {
@@ -286,12 +298,22 @@ private constructor(private val binding: ItemEditableSongBinding) :
         song: Song,
         listener: PlaylistDetailListAdapter.Listener,
         fallbackPlaylist: Playlist? = null,
+        playProgressStore: SongPlayProgressStore,
     ) {
         listener.bind(song, this, binding.interactBody, menuButton = binding.songMenu)
         listener.bind(this, binding.songDragHandle)
         binding.songAlbumCover.bind(song, fallbackPlaylist)
         binding.songName.text = song.name.resolve(binding.context)
         binding.songInfo.text = song.artists.resolveNames(binding.context)
+        SongPlayProgressUi.bind(
+            song,
+            playProgressStore,
+            binding.songPlayProgressFill,
+            binding.songName,
+            binding.songInfo,
+            binding.songAlbumCover,
+            binding.songPlayProgressBar,
+        )
         // Not swiping this ViewHolder if it's being re-bound, ensure that the background is
         // not visible. See MaterialDragCallback for why this is done.
         binding.background.isInvisible = true

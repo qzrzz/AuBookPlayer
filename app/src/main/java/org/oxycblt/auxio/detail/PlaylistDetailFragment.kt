@@ -65,7 +65,11 @@ class PlaylistDetailFragment :
     // Information about what playlist to display is initially within the navigation arguments
     // as a UID, as that is the only safe way to parcel an playlist.
     private val args: PlaylistDetailFragmentArgs by navArgs()
-    private val playlistListAdapter = PlaylistDetailListAdapter(this)
+    @javax.inject.Inject
+    lateinit var songPlayProgressStore: org.oxycblt.auxio.playback.SongPlayProgressStore
+    private val playlistListAdapter by lazy {
+        PlaylistDetailListAdapter(this, songPlayProgressStore)
+    }
     private var touchHelper: ItemTouchHelper? = null
     private var editNavigationListener: DialogAwareNavigationListener? = null
     private var getContentLauncher: ActivityResultLauncher<String>? = null
@@ -139,6 +143,9 @@ class PlaylistDetailFragment :
             ::updatePlayback,
         )
         collect(playbackModel.playbackDecision.flow, ::handlePlaybackDecision)
+        collect(songPlayProgressStore.updates) { uid ->
+            playlistListAdapter.notifyProgressChanged(uid)
+        }
     }
 
     override fun onMenuItemClick(item: MenuItem): Boolean {

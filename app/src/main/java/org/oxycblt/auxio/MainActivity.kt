@@ -88,15 +88,14 @@ class MainActivity : AppCompatActivity() {
     private fun setupTheme() {
         // Apply the theme configuration.
         AppCompatDelegate.setDefaultNightMode(uiSettings.theme)
-        // Apply the color scheme. The black theme requires it's own set of themes since
+        // Apply the color scheme. The black theme requires its own set of themes since
         // it's not possible to modify the themes at run-time.
-        if (isNight && uiSettings.useBlackTheme) {
-            L.d("Applying black theme [accent ${uiSettings.accent}]")
-            setTheme(uiSettings.accent.blackTheme)
-        } else {
-            L.d("Applying normal theme [accent ${uiSettings.accent}]")
-            setTheme(uiSettings.accent.theme)
-        }
+        val themeRes = uiSettings.accentThemeRes(isNight)
+        L.d("Applying theme [accent ${uiSettings.accent.index} res=$themeRes night=$isNight]")
+        setTheme(themeRes)
+        // Keep Application theme in sync so the playback service / system media controls
+        // use the same accent (not leftover DynamicColors purple).
+        application.setTheme(themeRes)
     }
 
     private fun setupEdgeToEdge(contentView: View) {

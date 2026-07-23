@@ -19,6 +19,8 @@
 package org.oxycblt.auxio.detail
 
 import android.os.Bundle
+import androidx.activity.result.ActivityResultLauncher
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.navigation.fragment.findNavController
 import androidx.navigation.fragment.navArgs
 import androidx.recyclerview.widget.LinearSmoothScroller
@@ -30,6 +32,7 @@ import org.oxycblt.auxio.detail.list.AlbumDetailListAdapter
 import org.oxycblt.auxio.list.Item
 import org.oxycblt.auxio.list.ListFragment
 import org.oxycblt.auxio.list.menu.Menu
+import org.oxycblt.auxio.music.AlbumDecision
 import org.oxycblt.auxio.music.PlaylistDecision
 import org.oxycblt.auxio.music.PlaylistMessage
 import org.oxycblt.auxio.music.resolve
@@ -57,7 +60,11 @@ class AlbumDetailFragment : DetailFragment<Album, Song>() {
     // Information about what album to display is initially within the navigation arguments
     // as a UID, as that is the only safe way to parcel an album.
     private val args: AlbumDetailFragmentArgs by navArgs()
-    private val albumListAdapter = AlbumDetailListAdapter(this)
+    @javax.inject.Inject
+    lateinit var songPlayProgressStore: org.oxycblt.auxio.playback.SongPlayProgressStore
+    private val albumListAdapter by lazy { AlbumDetailListAdapter(this, songPlayProgressStore) }
+    private var getImageLauncher: ActivityResultLauncher<String>? = null
+    private var pendingCoverAlbum: Album? = null
 
     override fun getDetailListAdapter() = albumListAdapter
 
@@ -65,6 +72,18 @@ class AlbumDetailFragment : DetailFragment<Album, Song>() {
 
     override fun onBindingCreated(binding: FragmentDetailBinding, savedInstanceState: Bundle?) {
         super.onBindingCreated(binding, savedInstanceState)
+
+        getImageLauncher =
+            registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+                val album = pendingCoverAlbum
+                pendingCoverAlbum = null
+                if (uri == null || album == null) {
+                    L.w("No URI/album for cover picker")
+                    return@registerForActivityResult
+                }
+                L.d("Received cover URI $uri for $album")
+                musicModel.setAlbumCover(album, uri)
+            }
 
         // -- VIEWMODEL SETUP ---
         // DetailViewModel handles most initialization from the navigation argument.
@@ -75,7 +94,9 @@ class AlbumDetailFragment : DetailFragment<Album, Song>() {
         collect(listModel.menu.flow, ::handleMenu)
         collectImmediately(listModel.selected, ::updateSelection)
         collect(musicModel.playlistDecision.flow, ::handlePlaylistDecision)
+        collect(musicModel.albumDecision.flow, ::handleAlbumDecision)
         collect(musicModel.playlistMessage.flow, ::handlePlaylistMessage)
+        collect(musicModel.albumCoverUpdates, ::onAlbumCoverUpdated)
         collectImmediately(
             playbackModel.song,
             playbackModel.parent,
@@ -83,10 +104,14 @@ class AlbumDetailFragment : DetailFragment<Album, Song>() {
             ::updatePlayback,
         )
         collect(playbackModel.playbackDecision.flow, ::handlePlaybackDecision)
+        collect(songPlayProgressStore.updates) { uid ->
+            albumListAdapter.notifyProgressChanged(uid)
+        }
     }
 
     override fun onDestroyBinding(binding: FragmentDetailBinding) {
         super.onDestroyBinding(binding)
+        getImageLauncher = null
         // Avoid possible race conditions that could cause a bad replace instruction to be consumed
         // during list initialization and crash the app. Could happen if the user is fast enough.
         detailModel.albumSongInstructions.consume()
@@ -97,7 +122,8 @@ class AlbumDetailFragment : DetailFragment<Album, Song>() {
     }
 
     override fun onShuffleParent(parent: Album) {
-        playbackModel.shuffle(parent)
+        // Reuse the shuffle control as "last progress" / continue (same as playlists/folders).
+        playbackModel.playFromLastProgress(parent)
     }
 
     override fun onRealClick(item: Song) {
@@ -115,6 +141,13 @@ class AlbumDetailFragment : DetailFragment<Album, Song>() {
 
     override fun onOpenSortMenu() {
         findNavController().navigateSafe(AlbumDetailFragmentDirections.sort())
+    }
+
+    private fun onAlbumCoverUpdated(uid: Music.UID) {
+        val album = detailModel.currentAlbum.value
+        if (album != null && album.uid == uid) {
+            requireBinding().detailCover.bind(album)
+        }
     }
 
     private fun updateAlbum(album: Album?) {
@@ -152,13 +185,40 @@ class AlbumDetailFragment : DetailFragment<Album, Song>() {
         }
 
         binding.detailPlayButton?.setOnClickListener { playbackModel.play(album) }
-        binding.detailShuffleButton?.setOnClickListener { playbackModel.shuffle(album) }
+        // Replace shuffle with "last progress" (continue) for albums / audiobooks.
+        binding.detailShuffleButton?.apply {
+            text = getString(R.string.lbl_last_progress)
+            setIconResource(R.drawable.ic_history_24)
+            contentDescription = getString(R.string.desc_last_progress)
+            setOnClickListener { playbackModel.playFromLastProgress(album) }
+        }
+        configureAlbumToolbarContinue()
         setToolbarPlaybackButtonsEnabled(true)
         updatePlayback(
             playbackModel.song.value,
             playbackModel.parent.value,
             playbackModel.isPlaying.value,
         )
+    }
+
+    private fun configureAlbumToolbarContinue() {
+        binding?.detailNormalToolbar?.getMenuButton(R.id.action_shuffle)?.apply {
+            setIconResource(R.drawable.ic_history_24)
+            contentDescription = getString(R.string.desc_last_progress)
+        }
+    }
+
+    private fun handleAlbumDecision(decision: AlbumDecision?) {
+        if (decision == null) return
+        when (decision) {
+            is AlbumDecision.SetCover -> {
+                L.d("Setting cover for ${decision.album}")
+                pendingCoverAlbum = decision.album
+                requireNotNull(getImageLauncher) { "Image picker launcher was not available" }
+                    .launch("image/*")
+                musicModel.albumDecision.consume()
+            }
+        }
     }
 
     private fun updateList(list: List<Item>) {

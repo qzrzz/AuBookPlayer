@@ -43,6 +43,7 @@ import java.lang.reflect.Method
 import javax.inject.Inject
 import kotlin.math.max
 import kotlin.math.min
+import androidx.core.view.isVisible
 import org.oxycblt.auxio.databinding.FragmentMainBinding
 import org.oxycblt.auxio.detail.DetailViewModel
 import org.oxycblt.auxio.detail.Show
@@ -52,6 +53,8 @@ import org.oxycblt.auxio.list.ListViewModel
 import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicType
 import org.oxycblt.auxio.music.MusicViewModel
+import org.oxycblt.auxio.music.SongFolder
+import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.playback.OpenPanel
 import org.oxycblt.auxio.playback.PlaybackBottomSheetBehavior
 import org.oxycblt.auxio.playback.PlaybackViewModel
@@ -65,9 +68,11 @@ import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.coordinatorLayoutBehavior
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.getDimen
+import org.oxycblt.auxio.util.getPlural
 import org.oxycblt.auxio.util.lazyReflectedMethod
 import org.oxycblt.auxio.util.navigateSafe
 import org.oxycblt.auxio.util.unlikelyToBeNull
+import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Playlist
@@ -189,7 +194,8 @@ class MainFragment :
 
         binding.mainScrim.setOnClickListener { binding.homeNewPlaylistFab.close() }
         binding.sheetScrim.setOnClickListener { binding.homeNewPlaylistFab.close() }
-        binding.homeShuffleFab.setOnClickListener { playbackModel.shuffleAll() }
+        // Continue last progress when available; otherwise play the library in order (no shuffle).
+        binding.homeShuffleFab.setOnClickListener { playbackModel.playFromLastProgressOrAll() }
         binding.homeNewPlaylistFab.apply {
             inflate(R.menu.new_playlist_actions)
             setOnActionSelectedListener(this@MainFragment)
@@ -218,7 +224,12 @@ class MainFragment :
         collectImmediately(musicModel.indexingState, ::updateIndexerState)
         collectImmediately(listModel.selected, selectionBackCallback::invalidateEnabled)
         collectImmediately(playbackModel.song, ::updateSong)
-        collectImmediately(playbackModel.parent, ::updateQueueSheetTitle)
+        collectImmediately(
+            playbackModel.parent,
+            playbackModel.activeFolder,
+            playbackModel.pagerQueue,
+            ::updateQueueSheetHeader,
+        )
         collectImmediately(playbackModel.openPanel.flow, ::handlePanel)
     }
 
@@ -449,7 +460,7 @@ class MainFragment :
         tabType: MusicType,
     ) {
         // If there are no songs, it's likely that the library has not been loaded, so
-        // displaying the shuffle FAB makes no sense. We also don't want the fast scroll
+        // displaying the continue FAB makes no sense. We also don't want the fast scroll
         // popup to overlap with the FAB, so we hide the FAB when fast scrolling too.
         if (shouldHideAllFabs(binding, songs, isFastScrolling)) {
             L.d("Hiding fab: [empty: ${songs.isEmpty()} scrolling: $isFastScrolling]")
@@ -582,19 +593,97 @@ class MainFragment :
     }
 
     /**
-     * When playing from a playlist, the lower sheet represents that playlist rather than a freeform
-     * queue — update the title and accessibility labels accordingly.
+     * Update the lower queue sheet header to reflect the playback context:
+     * playlist / album / folder (name + song count + more), or freeform queue.
      */
-    private fun updateQueueSheetTitle(parent: MusicParent?) {
+    private fun updateQueueSheetHeader(
+        parent: MusicParent?,
+        folder: SongFolder?,
+        pagerQueue: org.oxycblt.auxio.playback.PagerQueue,
+    ) {
         val binding = binding ?: return
-        val isPlaylist = parent is Playlist
-        val titleRes = if (isPlaylist) R.string.lbl_playlist else R.string.lbl_queue
-        val descRes = if (isPlaylist) R.string.desc_playlist_bar else R.string.desc_queue_bar
-        val title = getString(titleRes)
+        val context = requireContext()
+        val more = binding.queueMore
 
-        binding.queueTitle.text = title
-        binding.queueHandleWrapper?.contentDescription = getString(descRes)
-        ViewCompat.setAccessibilityPaneTitle(binding.queueSheet, title)
+        data class Header(
+            val title: String,
+            val descRes: Int,
+            val onMore: (() -> Unit)?,
+        )
+
+        val header =
+            when {
+                parent is Playlist -> {
+                    val count =
+                        context.getPlural(R.plurals.fmt_song_count, parent.songs.size)
+                    Header(
+                        title =
+                            context.getString(
+                                R.string.fmt_two,
+                                parent.name.resolve(context),
+                                count,
+                            ),
+                        descRes = R.string.desc_playlist_bar,
+                        onMore = {
+                            listModel.openMenu(R.menu.detail_playlist, parent)
+                        },
+                    )
+                }
+                parent is Album -> {
+                    val count =
+                        context.getPlural(R.plurals.fmt_song_count, parent.songs.size)
+                    Header(
+                        title =
+                            context.getString(
+                                R.string.fmt_two,
+                                parent.name.resolve(context),
+                                count,
+                            ),
+                        descRes = R.string.desc_album_bar,
+                        onMore = { listModel.openMenu(R.menu.detail_album, parent) },
+                    )
+                }
+                folder != null -> {
+                    val count =
+                        context.getPlural(R.plurals.fmt_song_count, folder.songs.size)
+                    Header(
+                        title =
+                            context.getString(R.string.fmt_two, folder.name, count),
+                        descRes = R.string.desc_folder_bar,
+                        onMore = { listModel.openMenu(R.menu.folder, folder) },
+                    )
+                }
+                else -> {
+                    val count =
+                        context.getPlural(R.plurals.fmt_song_count, pagerQueue.queue.size)
+                    Header(
+                        title =
+                            if (pagerQueue.queue.isEmpty()) {
+                                context.getString(R.string.lbl_queue)
+                            } else {
+                                context.getString(
+                                    R.string.fmt_two,
+                                    context.getString(R.string.lbl_queue),
+                                    count,
+                                )
+                            },
+                        descRes = R.string.desc_queue_bar,
+                        onMore = null,
+                    )
+                }
+            }
+
+        binding.queueTitle.text = header.title
+        binding.queueHandleWrapper?.contentDescription = getString(header.descRes)
+        ViewCompat.setAccessibilityPaneTitle(binding.queueSheet, header.title)
+
+        if (header.onMore != null) {
+            more.isVisible = true
+            more.setOnClickListener { header.onMore.invoke() }
+        } else {
+            more.isVisible = false
+            more.setOnClickListener(null)
+        }
     }
 
     private fun handlePanel(panel: OpenPanel?) {

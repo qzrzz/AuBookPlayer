@@ -19,6 +19,9 @@
     <dimen name="size_hero_medium">192dp</dimen>
     <dimen name="size_hero_large">256dp</dimen>
 
+    <!-- Width of the right-side playback settings drawer (Material default is 256dp). -->
+    <dimen name="side_sheet_width">320dp</dimen>
+
     <dimen name="size_icon_small">24dp</dimen>
     <dimen name="size_icon_medium">32dp</dimen>
     <dimen name="size_icon_large">40dp</dimen>

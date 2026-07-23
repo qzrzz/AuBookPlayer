@@ -34,6 +34,31 @@
             android:layout_height="wrap_content"
             android:background="@drawable/ui_selection_bg">
 
+            <View
+                android:id="@+id/song_play_progress_fill"
+                android:layout_width="0dp"
+                android:layout_height="0dp"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                app:layout_constraintTop_toTopOf="parent"
+                tools:background="?attr/colorSurfaceContainerHighest"
+                tools:scaleX="0.45"
+                tools:visibility="visible" />
+
+            <View
+                android:id="@+id/song_play_progress_bar"
+                android:layout_width="0dp"
+                android:layout_height="2dp"
+                android:visibility="gone"
+                app:layout_constraintBottom_toBottomOf="parent"
+                app:layout_constraintEnd_toEndOf="parent"
+                app:layout_constraintStart_toStartOf="parent"
+                tools:background="?attr/colorPrimary"
+                tools:scaleX="0.45"
+                tools:visibility="visible" />
+
             <org.oxycblt.auxio.image.CoverView
                 android:id="@+id/song_album_cover"
                 style="@style/Widget.Auxio.Image.Small"

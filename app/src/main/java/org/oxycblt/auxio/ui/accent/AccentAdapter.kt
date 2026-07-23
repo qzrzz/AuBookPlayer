@@ -18,26 +18,27 @@
  
 package org.oxycblt.auxio.ui.accent
 
-import android.R as SR
+import android.content.res.ColorStateList
 import android.view.View
 import android.view.ViewGroup
 import androidx.appcompat.widget.TooltipCompat
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
-import com.google.android.material.R as MR
 import org.oxycblt.auxio.databinding.ItemAccentBinding
 import org.oxycblt.auxio.list.ClickableListListener
-import org.oxycblt.auxio.util.getAttrColorCompat
-import org.oxycblt.auxio.util.getColorCompat
 import org.oxycblt.auxio.util.inflater
 
 /**
  * A [RecyclerView.Adapter] that displays [Accent] choices.
  *
  * @param listener A [ClickableListListener] to bind interactions to.
+ * @param useBlackTheme Whether previews should resolve black-theme color roles.
  * @author Alexander Capehart (OxygenCobalt)
  */
-class AccentAdapter(private val listener: ClickableListListener<Accent>) :
-    RecyclerView.Adapter<AccentViewHolder>() {
+class AccentAdapter(
+    private val listener: ClickableListListener<Accent>,
+    private val useBlackTheme: Boolean = false,
+) : RecyclerView.Adapter<AccentViewHolder>() {
     /** The currently selected [Accent]. */
     var selectedAccent: Accent? = null
         private set
@@ -58,7 +59,7 @@ class AccentAdapter(private val listener: ClickableListListener<Accent>) :
         val item = Accent.from(position)
         if (payloads.isEmpty()) {
             // Not a re-selection, re-bind with new data.
-            holder.bind(item, listener)
+            holder.bind(item, listener, useBlackTheme)
         }
         holder.setSelected(item == selectedAccent)
     }
@@ -88,26 +89,38 @@ class AccentAdapter(private val listener: ClickableListListener<Accent>) :
 /**
  * A [RecyclerView.ViewHolder] that displays an [Accent] choice. Use [from] to create an instance.
  *
+ * Dual-tone swatch: outer ring = [AccentPreviewColors.primaryContainer] (tonal fills), inner disc =
+ * [AccentPreviewColors.primary] (icons / selected controls).
+ *
  * @author Alexander Capehart (OxygenCobalt)
  */
 class AccentViewHolder private constructor(private val binding: ItemAccentBinding) :
     RecyclerView.ViewHolder(binding.root) {
+
+    private var onPrimary: Int = 0
 
     /**
      * Bind new data to this instance.
      *
      * @param accent The new [Accent] to bind.
      * @param listener A [ClickableListListener] to bind interactions to.
+     * @param useBlackTheme Resolve colors against the black theme variant.
      */
-    fun bind(accent: Accent, listener: ClickableListListener<Accent>) {
+    fun bind(
+        accent: Accent,
+        listener: ClickableListListener<Accent>,
+        useBlackTheme: Boolean = false,
+    ) {
         listener.bind(accent, this, binding.accent)
-        binding.accent.apply {
-            // Add a Tooltip based on the content description so that the purpose of this
-            // button can be clear.
-            contentDescription = context.getString(accent.name)
-            TooltipCompat.setTooltipText(this, contentDescription)
-            backgroundTintList = context.getColorCompat(accent.primary)
-        }
+        val colors = accent.previewColors(binding.root.context, useBlackTheme)
+        onPrimary = colors.onPrimary
+
+        // Solid oval tints — no MaterialButton theme overlay muting the hue.
+        binding.accentOuter.backgroundTintList = ColorStateList.valueOf(colors.primaryContainer)
+        binding.accentInner.backgroundTintList = ColorStateList.valueOf(colors.primary)
+
+        binding.accent.contentDescription = binding.root.context.getString(accent.name)
+        TooltipCompat.setTooltipText(binding.accent, binding.accent.contentDescription)
     }
 
     /**
@@ -116,13 +129,9 @@ class AccentViewHolder private constructor(private val binding: ItemAccentBindin
      * @param isSelected Whether this [Accent] is currently selected.
      */
     fun setSelected(isSelected: Boolean) {
-        binding.accent.apply {
-            iconTint =
-                if (isSelected) {
-                    context.getAttrColorCompat(MR.attr.colorSurface)
-                } else {
-                    context.getColorCompat(SR.color.transparent)
-                }
+        binding.accentCheck.isVisible = isSelected
+        if (isSelected) {
+            binding.accentCheck.imageTintList = ColorStateList.valueOf(onPrimary)
         }
     }
 

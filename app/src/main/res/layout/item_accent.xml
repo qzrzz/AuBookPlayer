@@ -1,21 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
+<!-- Dual-tone accent swatch: outer = primaryContainer (tonal buttons),
+     inner = primary (icons / selected controls). Matches real UI roles. -->
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:padding="@dimen/spacing_tiny"
-    android:theme="@style/ThemeOverlay.Accent">
+    android:padding="@dimen/spacing_tiny">
 
-    <org.oxycblt.auxio.ui.RippleFixMaterialButton
+    <FrameLayout
         android:id="@+id/accent"
-        style="@style/Widget.Auxio.Button.Icon.Small"
-        android:layout_width="wrap_content"
-        android:layout_height="wrap_content"
+        android:layout_width="@dimen/size_touchable_small"
+        android:layout_height="@dimen/size_touchable_small"
         android:layout_gravity="center"
-        app:icon="@drawable/ic_check_24"
-        app:iconTint="?attr/colorSurface"
-        tools:backgroundTint="?attr/colorPrimary"
-        tools:ignore="ContentDescription, SpeakableTextPresentCheck" />
+        android:background="?attr/selectableItemBackgroundBorderless"
+        android:clickable="true"
+        android:focusable="true"
+        tools:ignore="SpeakableTextPresentCheck">
 
+        <View
+            android:id="@+id/accent_outer"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_gravity="center"
+            android:background="@drawable/ui_accent_swatch"
+            tools:backgroundTint="#E0E995" />
+
+        <View
+            android:id="@+id/accent_inner"
+            android:layout_width="@dimen/size_icon_medium"
+            android:layout_height="@dimen/size_icon_medium"
+            android:layout_gravity="center"
+            android:background="@drawable/ui_accent_swatch"
+            tools:backgroundTint="#5B631E" />
+
+        <ImageView
+            android:id="@+id/accent_check"
+            android:layout_width="@dimen/size_icon_small"
+            android:layout_height="@dimen/size_icon_small"
+            android:layout_gravity="center"
+            android:contentDescription="@null"
+            android:src="@drawable/ic_check_24"
+            android:visibility="gone"
+            tools:visibility="visible" />
+    </FrameLayout>
 </FrameLayout>

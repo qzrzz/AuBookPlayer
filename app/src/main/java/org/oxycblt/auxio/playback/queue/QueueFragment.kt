@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
+
 package org.oxycblt.auxio.playback.queue
 
 import android.os.Bundle
@@ -26,11 +26,13 @@ import androidx.fragment.app.viewModels
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
 import dagger.hilt.android.AndroidEntryPoint
+import javax.inject.Inject
 import kotlin.math.min
 import org.oxycblt.auxio.databinding.FragmentQueueBinding
 import org.oxycblt.auxio.list.ClickableListListener
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.playback.PlaybackViewModel
+import org.oxycblt.auxio.playback.SongPlayProgressStore
 import org.oxycblt.auxio.ui.ViewBindingFragment
 import org.oxycblt.auxio.util.collect
 import org.oxycblt.auxio.util.collectImmediately
@@ -42,27 +44,22 @@ import timber.log.Timber as L
 
 /**
  * A [ViewBindingFragment] that displays the current queue (read-only order for audiobooks).
- *
- * @author Alexander Capehart (OxygenCobalt)
  */
 @AndroidEntryPoint
 class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), ClickableListListener<Song> {
     private val queueModel: QueueViewModel by viewModels()
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val musicModel: MusicViewModel by activityViewModels()
-    private val queueAdapter = QueueAdapter(this)
+    @Inject lateinit var songPlayProgressStore: SongPlayProgressStore
+    private val queueAdapter by lazy { QueueAdapter(this, songPlayProgressStore) }
 
     override fun onCreateBinding(inflater: LayoutInflater) = FragmentQueueBinding.inflate(inflater)
 
     override fun onBindingCreated(binding: FragmentQueueBinding, savedInstanceState: Bundle?) {
         super.onBindingCreated(binding, savedInstanceState)
 
-        // --- UI SETUP ---
-        // No ItemTouchHelper: hide drag handles and disallow reordering / swipe-remove.
         binding.queueRecycler.adapter = queueAdapter
 
-        // Sometimes the scroll can change without the listener being updated, so we also
-        // check for relayout events.
         binding.queueRecycler.apply {
             addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> updateDivider() }
             addOnScrollListener(
@@ -74,7 +71,6 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), ClickableList
             )
         }
 
-        // --- VIEWMODEL SETUP ----
         collectImmediately(
             queueModel.queue,
             queueModel.index,
@@ -83,6 +79,7 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), ClickableList
         )
         collectImmediately(playbackModel.parent, ::updateParent)
         collect(musicModel.playlistCoverUpdates, ::onPlaylistCoverUpdated)
+        collect(songPlayProgressStore.updates, ::onPlayProgressUpdated)
     }
 
     private fun updateParent(parent: MusicParent?) {
@@ -100,11 +97,13 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), ClickableList
         }
     }
 
+    private fun onPlayProgressUpdated(uid: Music.UID) {
+        queueAdapter.notifyProgressChanged(uid)
+    }
+
     override fun onDestroyBinding(binding: FragmentQueueBinding) {
         super.onDestroyBinding(binding)
         binding.queueRecycler.adapter = null
-        // Avoid possible race conditions that could cause a bad instruction to be consumed
-        // during list initialization and crash the app. Could happen if the user is fast enough.
         queueModel.queueInstructions.consume()
     }
 
@@ -125,7 +124,6 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), ClickableList
         queueAdapter.update(queue, queueModel.queueInstructions.consume())
         queueAdapter.setPosition(index, isPlaying)
 
-        // If requested, scroll to a new item (occurs when the index moves)
         val scrollTo = queueModel.scrollTo.consume()
         if (scrollTo != null) {
             val lmm = binding.queueRecycler.layoutManager as LinearLayoutManager
@@ -133,17 +131,10 @@ class QueueFragment : ViewBindingFragment<FragmentQueueBinding>(), ClickableList
             val end = lmm.findLastCompletelyVisibleItemPosition()
             val notInitialized =
                 start == RecyclerView.NO_POSITION || end == RecyclerView.NO_POSITION
-            // When we scroll, we want to scroll to the almost-top so the user can see
-            // future songs instead of past songs. The way we have to do this however is
-            // dependent on where we have to scroll to get to the currently playing song.
             if (notInitialized || scrollTo < start) {
-                // We need to scroll upwards, or initialize the scroll, no need to offset
                 L.d("Not scrolling downwards, no offset needed")
                 binding.queueRecycler.scrollToPosition(scrollTo)
             } else if (scrollTo > end) {
-                // We need to scroll downwards, we need to offset by a screen of songs.
-                // This does have some error due to how many completely visible items on-screen
-                // can vary. This is considered okay.
                 val offset = scrollTo + (end - start)
                 L.d("Scrolling downwards, offsetting by $offset")
                 binding.queueRecycler.scrollToPosition(min(queue.lastIndex, offset))

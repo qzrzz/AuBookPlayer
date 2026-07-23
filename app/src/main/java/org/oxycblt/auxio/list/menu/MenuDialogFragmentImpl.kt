@@ -104,12 +104,18 @@ class AlbumMenuDialogFragment : MenuDialogFragment<Menu.ForAlbum>() {
     private val musicModel: MusicViewModel by activityViewModels()
     private val playbackModel: PlaybackViewModel by activityViewModels()
     private val args: AlbumMenuDialogFragmentArgs by navArgs()
+    @javax.inject.Inject lateinit var albumCoverStore: org.oxycblt.auxio.image.AlbumCoverStore
 
     override val parcel
         get() = args.parcel
 
-    // Nothing to disable in album menus.
-    override fun getDisabledItemIds(menu: Menu.ForAlbum) = setOf<Int>()
+    override fun getDisabledItemIds(menu: Menu.ForAlbum): Set<Int> {
+        val disabled = mutableSetOf<Int>()
+        if (!albumCoverStore.hasCustomCover(menu.album.uid)) {
+            disabled += R.id.action_clear_cover
+        }
+        return disabled
+    }
 
     override fun updateMenu(binding: DialogMenuBinding, menu: Menu.ForAlbum) {
         val context = requireContext()
@@ -122,7 +128,7 @@ class AlbumMenuDialogFragment : MenuDialogFragment<Menu.ForAlbum>() {
     override fun onClick(item: MenuItem, menu: Menu.ForAlbum) {
         when (item.itemId) {
             R.id.action_play -> playbackModel.play(menu.album)
-            R.id.action_shuffle -> playbackModel.shuffle(menu.album)
+            R.id.action_shuffle -> playbackModel.playFromLastProgress(menu.album)
             R.id.action_detail -> detailModel.showAlbum(menu.album)
             R.id.action_play_next -> {
                 playbackModel.playNext(menu.album)
@@ -134,6 +140,12 @@ class AlbumMenuDialogFragment : MenuDialogFragment<Menu.ForAlbum>() {
             }
             R.id.action_artist_details -> detailModel.showArtist(menu.album)
             R.id.action_playlist_add -> musicModel.addToPlaylist(menu.album)
+            R.id.action_set_cover -> musicModel.setAlbumCover(menu.album)
+            R.id.action_clear_cover -> musicModel.clearAlbumCover(menu.album)
+            R.id.action_reset_play_history -> {
+                playbackModel.resetSongPlayHistory(menu.album.songs)
+                requireContext().showToast(R.string.lng_play_history_reset)
+            }
             R.id.action_share -> requireContext().share(menu.album)
             else -> error("Unexpected menu item selected $item")
         }
@@ -331,6 +343,10 @@ class FolderMenuDialogFragment : MenuDialogFragment<Menu.ForFolder>() {
             R.id.action_new_playlist -> musicModel.createPlaylist(songs = menu.folder.songs)
             R.id.action_set_cover -> musicModel.setFolderCover(menu.folder)
             R.id.action_clear_cover -> musicModel.clearFolderCover(menu.folder)
+            R.id.action_reset_play_history -> {
+                playbackModel.resetSongPlayHistory(menu.folder.songs)
+                requireContext().showToast(R.string.lng_play_history_reset)
+            }
             else -> error("Unexpected menu item $item")
         }
     }
@@ -406,6 +422,10 @@ class PlaylistMenuDialogFragment : MenuDialogFragment<Menu.ForPlaylist>() {
             R.id.action_rename -> musicModel.renamePlaylist(menu.playlist)
             R.id.action_set_cover -> musicModel.setPlaylistCover(menu.playlist)
             R.id.action_clear_cover -> musicModel.clearPlaylistCover(menu.playlist)
+            R.id.action_reset_play_history -> {
+                playbackModel.resetSongPlayHistory(menu.playlist.songs)
+                requireContext().showToast(R.string.lng_play_history_reset)
+            }
             R.id.action_import -> musicModel.importPlaylist(target = menu.playlist)
             R.id.action_export -> musicModel.exportPlaylist(menu.playlist)
             R.id.action_delete -> musicModel.deletePlaylist(menu.playlist)

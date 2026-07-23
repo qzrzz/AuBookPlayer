@@ -36,4 +36,8 @@ interface ImageModule {
     @Singleton
     @Binds
     fun folderCoverStore(impl: FolderCoverStoreImpl): FolderCoverStore
+
+    @Singleton
+    @Binds
+    fun albumCoverStore(impl: AlbumCoverStoreImpl): AlbumCoverStore
 }

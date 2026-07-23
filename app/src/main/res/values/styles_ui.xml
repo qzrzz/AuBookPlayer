@@ -70,6 +70,19 @@
         <item name="shouldRemoveExpandedCorners">false</item>
     </style>
 
+    <!-- Modal side sheet: wrap-content height + large corners (detached look).
+         Margins / system-bar insets are applied in ViewBindingSideSheetDialogFragment. -->
+    <style name="Widget.Auxio.SideSheet.Modal" parent="Widget.Material3.SideSheet.Modal.Detached">
+        <item name="android:layout_width">@dimen/side_sheet_width</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_margin">0dp</item>
+        <item name="shapeAppearance">@style/ShapeAppearance.Material3.Corner.Large</item>
+    </style>
+
+    <style name="ThemeOverlay.Auxio.SideSheetDialog" parent="ThemeOverlay.Material3.SideSheetDialog">
+        <item name="sideSheetModalStyle">@style/Widget.Auxio.SideSheet.Modal</item>
+    </style>
+
     <style name="Widget.Auxio.BottomSheet.Dialog" parent="ThemeOverlay.Material3.BottomSheetDialog">
         <item name="bottomSheetStyle">@style/Widget.Auxio.BottomSheet.Modal</item>
         <item name="materialButtonStyle">@style/Widget.Auxio.Button</item>

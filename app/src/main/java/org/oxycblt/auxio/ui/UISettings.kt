@@ -44,6 +44,13 @@ interface UISettings : Settings<UISettings.Listener> {
     /** Whether to round additional UI elements that require album covers to be rounded. */
     val roundMode: Boolean
 
+    /**
+     * Theme style resource for the current accent, optionally using the black-background night
+     * variant. Used by [android.app.Application] and services so media notifications match the UI.
+     */
+    fun accentThemeRes(night: Boolean): Int =
+        if (night && useBlackTheme) accent.blackTheme else accent.theme
+
     interface Listener {
         /** Called when [roundMode] changes. */
         fun onRoundModeChanged()

@@ -33,6 +33,10 @@
         android:icon="@drawable/ic_delete_24"
         android:title="@string/lbl_clear_cover" />
     <item
+        android:id="@+id/action_reset_play_history"
+        android:icon="@drawable/ic_history_24"
+        android:title="@string/lbl_reset_play_history" />
+    <item
         android:id="@+id/action_import"
         android:icon="@drawable/ic_import_24"
         android:title="@string/lbl_import" />

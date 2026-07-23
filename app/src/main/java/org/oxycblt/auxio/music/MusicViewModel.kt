@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.SharedFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.R
+import org.oxycblt.auxio.image.AlbumCoverStore
 import org.oxycblt.auxio.image.FolderCoverStore
 import org.oxycblt.auxio.image.PlaylistCoverStore
 import org.oxycblt.auxio.list.ListSettings
@@ -61,6 +62,7 @@ constructor(
     private val musicRepository: MusicRepository,
     private val playlistCoverStore: PlaylistCoverStore,
     private val folderCoverStore: FolderCoverStore,
+    private val albumCoverStore: AlbumCoverStore,
 ) : ViewModel(), MusicRepository.UpdateListener, MusicRepository.IndexingListener {
     private val externalPlaylistManager = ExternalPlaylistManager.from(context)
 
@@ -90,6 +92,12 @@ constructor(
     val folderDecision: Event<FolderDecision>
         get() = _folderDecision
 
+    private val _albumDecision = MutableEvent<AlbumDecision>()
+
+    /** An [AlbumDecision] awaiting a view that can fulfill it (e.g. image picker). */
+    val albumDecision: Event<AlbumDecision>
+        get() = _albumDecision
+
     private val _playlistMessage = MutableEvent<PlaylistMessage>()
     val playlistMessage: Event<PlaylistMessage>
         get() = _playlistMessage
@@ -104,6 +112,10 @@ constructor(
     /** Emits a folder key whenever that folder's custom cover is set or cleared. */
     val folderCoverUpdates: SharedFlow<String>
         get() = folderCoverStore.updates
+
+    /** Emits an album [Music.UID] whenever that album's custom cover is set or cleared. */
+    val albumCoverUpdates: SharedFlow<Music.UID>
+        get() = albumCoverStore.updates
 
     init {
         musicRepository.addUpdateListener(this)
@@ -329,6 +341,32 @@ constructor(
         }
     }
 
+    /**
+     * Prompt the user to pick an image as the custom cover for [album], or apply [uri] if already
+     * chosen.
+     */
+    fun setAlbumCover(album: Album, uri: Uri? = null) {
+        if (uri != null) {
+            viewModelScope.launch {
+                val ok = albumCoverStore.setCover(album.uid, uri)
+                _playlistMessage.put(
+                    if (ok) PlaylistMessage.CoverSetSuccess else PlaylistMessage.CoverSetFailed
+                )
+            }
+        } else {
+            L.d("Launching cover picker for album $album")
+            _albumDecision.put(AlbumDecision.SetCover(album))
+        }
+    }
+
+    /** Remove any custom cover for [album], restoring the auto-generated cover. */
+    fun clearAlbumCover(album: Album) {
+        viewModelScope.launch {
+            albumCoverStore.clearCover(album.uid)
+            _playlistMessage.put(PlaylistMessage.CoverCleared)
+        }
+    }
+
     fun renamePlaylist(
         playlist: Playlist,
         name: String? = null,
@@ -546,6 +584,12 @@ sealed interface PlaylistDecision {
 sealed interface FolderDecision {
     /** Launch an image picker so the user can set a custom cover for [folder]. */
     data class SetCover(val folder: SongFolder) : FolderDecision
+}
+
+/** Navigation / UI command for album-specific actions that need a host fragment. */
+sealed interface AlbumDecision {
+    /** Launch an image picker so the user can set a custom cover for [album]. */
+    data class SetCover(val album: Album) : AlbumDecision
 }
 
 sealed interface PlaylistMessage {

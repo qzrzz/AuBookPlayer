@@ -1,14 +1,37 @@
 <?xml version="1.0" encoding="utf-8"?>
-<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:background="@drawable/ui_item_bg"
-    android:paddingStart="@dimen/spacing_medium"
-    android:paddingTop="@dimen/spacing_mid_medium"
-    android:paddingEnd="@dimen/spacing_mid_medium"
-    android:paddingBottom="@dimen/spacing_mid_medium">
+    android:background="@drawable/ui_item_bg">
+
+    <View
+        android:id="@+id/song_play_progress_fill"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        tools:background="?attr/colorSurfaceContainerHighest"
+        tools:scaleX="0.45"
+        tools:visibility="visible" />
+
+    <View
+        android:id="@+id/song_play_progress_bar"
+        android:layout_width="match_parent"
+        android:layout_height="2dp"
+        android:layout_gravity="bottom"
+        android:visibility="gone"
+        tools:background="?attr/colorPrimary"
+        tools:scaleX="0.45"
+        tools:visibility="visible" />
+
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="@dimen/spacing_medium"
+        android:paddingTop="@dimen/spacing_mid_medium"
+        android:paddingEnd="@dimen/spacing_mid_medium"
+        android:paddingBottom="@dimen/spacing_mid_medium">
 
     <!--
     We don't want to show an album cover, but we still want the spacing of this song
@@ -94,4 +117,5 @@
         app:layout_constraintEnd_toEndOf="parent"
         app:layout_constraintTop_toTopOf="parent" />
 
-</androidx.constraintlayout.widget.ConstraintLayout>
+    </androidx.constraintlayout.widget.ConstraintLayout>
+</FrameLayout>

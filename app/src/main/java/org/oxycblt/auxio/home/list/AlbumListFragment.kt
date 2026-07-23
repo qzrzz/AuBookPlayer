@@ -41,6 +41,7 @@ import org.oxycblt.auxio.music.IndexingState
 import org.oxycblt.auxio.music.MusicViewModel
 import org.oxycblt.auxio.playback.PlaybackViewModel
 import org.oxycblt.auxio.playback.formatDurationMsPopup
+import org.oxycblt.auxio.util.collect
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Music
@@ -88,12 +89,20 @@ class AlbumListFragment :
         collectImmediately(homeModel.albumList, ::updateAlbums)
         collectImmediately(homeModel.empty, musicModel.indexingState, ::updateNoMusicIndicator)
         collectImmediately(listModel.selected, ::updateSelection)
+        collect(musicModel.albumCoverUpdates, ::onAlbumCoverUpdated)
         collectImmediately(
             playbackModel.song,
             playbackModel.parent,
             playbackModel.isPlaying,
             ::updatePlayback,
         )
+    }
+
+    private fun onAlbumCoverUpdated(uid: Music.UID) {
+        val index = homeModel.albumList.value.indexOfFirst { it.uid == uid }
+        if (index >= 0) {
+            albumAdapter.notifyItemChanged(index)
+        }
     }
 
     override fun onDestroyBinding(binding: FragmentHomeListBinding) {

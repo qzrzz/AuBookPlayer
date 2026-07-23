@@ -172,7 +172,7 @@ class PlaybackPanelFragment :
 
         // --- VIEWMODEL SETUP --
         collectImmediately(playbackModel.song, ::updateSong)
-        collectImmediately(playbackModel.parent, ::updateParent)
+        collectImmediately(playbackModel.parent, playbackModel.activeFolder, ::updateParent)
         collectImmediately(playbackModel.positionDs, ::updatePosition)
         collectImmediately(playbackModel.repeatMode, ::updateRepeat)
         collectImmediately(playbackModel.playbackSpeed, ::updateSpeed)
@@ -264,11 +264,15 @@ class PlaybackPanelFragment :
         binding.playbackSeekBar?.durationDs = song.durationMs.msToDs()
     }
 
-    private fun updateParent(parent: MusicParent?) {
+    private fun updateParent(parent: MusicParent?, folder: org.oxycblt.auxio.music.SongFolder?) {
         val binding = requireBinding()
         val context = requireContext()
         binding.playbackToolbar.subtitle =
-            parent?.run { name.resolve(context) } ?: context.getString(R.string.lbl_all_songs)
+            when {
+                parent != null -> parent.name.resolve(context)
+                folder != null -> folder.name
+                else -> context.getString(R.string.lbl_all_songs)
+            }
         // Songs without album art fall back to the playlist cover while playing from a playlist.
         val playlist = parent as? Playlist
         if (coverPagerAdapter.fallbackPlaylist != playlist) {

@@ -24,15 +24,20 @@ import org.oxycblt.auxio.list.Item
 import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
 import org.oxycblt.auxio.list.recycler.SongViewHolder
 import org.oxycblt.auxio.music.SongFolder
+import org.oxycblt.auxio.playback.SongPlayProgressStore
+import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.Song
 
 /**
  * A [DetailListAdapter] implementing the header and sub-items for the [SongFolder] detail view.
  *
  * @param listener A [DetailListAdapter.Listener] to bind interactions to.
+ * @param playProgressStore Shared listen progress for greyscale / fill bars.
  */
-class FolderDetailListAdapter(private val listener: Listener<Song>) :
-    DetailListAdapter(listener, DIFF_CALLBACK) {
+class FolderDetailListAdapter(
+    private val listener: Listener<Song>,
+    private val playProgressStore: SongPlayProgressStore,
+) : DetailListAdapter(listener, DIFF_CALLBACK) {
     override fun getItemViewType(position: Int) =
         when (getItem(position)) {
             is Song -> SongViewHolder.VIEW_TYPE
@@ -48,8 +53,13 @@ class FolderDetailListAdapter(private val listener: Listener<Song>) :
     override fun onBindViewHolder(holder: RecyclerView.ViewHolder, position: Int) {
         super.onBindViewHolder(holder, position)
         when (val item = getItem(position)) {
-            is Song -> (holder as SongViewHolder).bind(item, listener)
+            is Song -> (holder as SongViewHolder).bind(item, listener, playProgressStore)
         }
+    }
+
+    fun notifyProgressChanged(songUid: Music.UID) {
+        val index = currentList.indexOfFirst { it is Song && it.uid == songUid }
+        if (index >= 0) notifyItemChanged(index)
     }
 
     private companion object {

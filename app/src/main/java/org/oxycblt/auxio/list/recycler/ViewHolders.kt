@@ -20,6 +20,7 @@ package org.oxycblt.auxio.list.recycler
 
 import android.annotation.SuppressLint
 import android.view.View
+import androidx.core.view.isVisible
 import androidx.recyclerview.widget.RecyclerView
 import com.google.android.material.divider.MaterialDivider
 import org.oxycblt.auxio.IntegerTable
@@ -35,6 +36,8 @@ import org.oxycblt.auxio.list.adapter.SimpleDiffCallback
 import org.oxycblt.auxio.music.areNamesTheSame
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
+import org.oxycblt.auxio.playback.SongPlayProgressStore
+import org.oxycblt.auxio.playback.ui.SongPlayProgressUi
 import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.getPlural
 import org.oxycblt.auxio.util.inflater
@@ -56,12 +59,34 @@ class SongViewHolder private constructor(private val binding: ItemSongBinding) :
      *
      * @param song The new [Song] to bind.
      * @param listener An [SelectableListListener] to bind interactions to.
+     * @param playProgressStore Optional shared listen-progress store for greyscale / fill bar.
      */
-    fun bind(song: Song, listener: SelectableListListener<Song>) {
+    fun bind(
+        song: Song,
+        listener: SelectableListListener<Song>,
+        playProgressStore: SongPlayProgressStore? = null,
+    ) {
         listener.bind(song, this, menuButton = binding.songMenu)
         binding.songAlbumCover.bind(song)
         binding.songName.text = song.name.resolve(binding.context)
         binding.songInfo.text = song.artists.resolveNames(binding.context)
+        if (playProgressStore != null) {
+            SongPlayProgressUi.bind(
+                song,
+                playProgressStore,
+                binding.songPlayProgressFill,
+                binding.songName,
+                binding.songInfo,
+                binding.songAlbumCover,
+                binding.songPlayProgressBar,
+            )
+        } else {
+            binding.songPlayProgressFill.isVisible = false
+            binding.songPlayProgressBar.isVisible = false
+            binding.songName.isEnabled = true
+            binding.songInfo.isEnabled = true
+            binding.songAlbumCover.isEnabled = true
+        }
     }
 
     override fun updatePlayingIndicator(isActive: Boolean, isPlaying: Boolean) {

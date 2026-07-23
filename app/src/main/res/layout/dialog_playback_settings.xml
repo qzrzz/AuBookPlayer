@@ -1,273 +1,340 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<!-- Right-side drawer content for playback settings.
+     Sheet height is forced to wrap_content in ViewBindingSideSheetDialogFragment so this
+     panel hugs the items (Material SideSheet is full-height by default). -->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
-    android:orientation="vertical"
-    android:paddingBottom="@dimen/spacing_medium">
+    android:clipToPadding="false"
+    android:fillViewport="false"
+    android:overScrollMode="ifContentScrolls"
+    android:scrollbars="vertical">
 
-    <com.google.android.material.bottomsheet.BottomSheetDragHandleView
-        android:id="@+id/settings_handle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
-    <TextView
-        android:id="@+id/settings_title"
-        style="@style/Widget.Auxio.TextView.Primary"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginHorizontal="@dimen/spacing_medium"
-        android:layout_marginBottom="@dimen/spacing_medium"
-        android:text="播放设置" />
-
-    <!-- 1. 重复播放 -->
     <LinearLayout
-        android:id="@+id/setting_repeat_item"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="@dimen/spacing_medium"
-        android:paddingVertical="@dimen/spacing_medium">
+        android:orientation="vertical"
+        android:paddingTop="@dimen/spacing_small"
+        android:paddingBottom="@dimen/spacing_small">
 
-        <ImageView
-            android:id="@+id/setting_repeat_icon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_repeat_off_24"
-            app:tint="?attr/colorOnSurface" />
-
-        <LinearLayout
-            android:layout_width="0dp"
+        <TextView
+            android:id="@+id/settings_title"
+            style="@style/Widget.Auxio.TextView.Primary"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/spacing_medium"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:layout_marginHorizontal="@dimen/spacing_medium"
+            android:layout_marginTop="@dimen/spacing_small"
+            android:layout_marginBottom="@dimen/spacing_tiny"
+            android:text="@string/lbl_playback_settings" />
 
-            <TextView
-                style="@style/Widget.Auxio.TextView.Primary.Compact"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="重复播放" />
-
-            <TextView
-                android:id="@+id/setting_repeat_status"
-                style="@style/Widget.Auxio.TextView.Secondary.Compact"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="关闭" />
-        </LinearLayout>
-    </LinearLayout>
-
-    <!-- 2. 随机播放 -->
-    <LinearLayout
-        android:id="@+id/setting_shuffle_item"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="@dimen/spacing_medium"
-        android:paddingVertical="@dimen/spacing_medium">
-
-        <ImageView
-            android:id="@+id/setting_shuffle_icon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/sel_shuffle_state_24"
-            app:tint="?attr/colorOnSurface" />
-
+        <!-- 1. 重复播放 -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:id="@+id/setting_repeat_item"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/spacing_medium"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/spacing_medium"
+            android:paddingVertical="@dimen/spacing_medium">
 
-            <TextView
-                style="@style/Widget.Auxio.TextView.Primary.Compact"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="随机播放" />
+            <ImageView
+                android:id="@+id/setting_repeat_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_repeat_off_24"
+                app:tint="?attr/colorOnSurface" />
 
-            <TextView
-                android:id="@+id/setting_shuffle_status"
-                style="@style/Widget.Auxio.TextView.Secondary.Compact"
-                android:layout_width="match_parent"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="关闭" />
+                android:layout_marginStart="@dimen/spacing_medium"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.Auxio.TextView.Primary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/lbl_repeat_mode" />
+
+                <TextView
+                    android:id="@+id/setting_repeat_status"
+                    style="@style/Widget.Auxio.TextView.Secondary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    tools:text="Off" />
+            </LinearLayout>
         </LinearLayout>
-    </LinearLayout>
 
-    <!-- 3. 倍数播放 -->
-    <LinearLayout
-        android:id="@+id/setting_speed_item"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="@dimen/spacing_medium"
-        android:paddingVertical="@dimen/spacing_medium">
-
-        <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_speed_24"
-            app:tint="?attr/colorOnSurface" />
-
+        <!-- 2. 随机播放 -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:id="@+id/setting_shuffle_item"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/spacing_medium"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/spacing_medium"
+            android:paddingVertical="@dimen/spacing_medium">
 
-            <TextView
-                style="@style/Widget.Auxio.TextView.Primary.Compact"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="倍数播放" />
+            <ImageView
+                android:id="@+id/setting_shuffle_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@null"
+                android:src="@drawable/sel_shuffle_state_24"
+                app:tint="?attr/colorOnSurface" />
 
-            <TextView
-                android:id="@+id/setting_speed_status"
-                style="@style/Widget.Auxio.TextView.Secondary.Compact"
-                android:layout_width="match_parent"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="1X" />
+                android:layout_marginStart="@dimen/spacing_medium"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.Auxio.TextView.Primary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/lbl_shuffle" />
+
+                <TextView
+                    android:id="@+id/setting_shuffle_status"
+                    style="@style/Widget.Auxio.TextView.Secondary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    tools:text="Off" />
+            </LinearLayout>
         </LinearLayout>
-    </LinearLayout>
 
-    <!-- 4. 跳过头尾 -->
-    <LinearLayout
-        android:id="@+id/setting_skip_head_tail_item"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="@dimen/spacing_medium"
-        android:paddingVertical="@dimen/spacing_medium">
-
-        <ImageView
-            android:id="@+id/setting_skip_head_tail_icon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_time_24"
-            app:tint="?attr/colorOnSurface" />
-
+        <!-- 3. 倍数播放 -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:id="@+id/setting_speed_item"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/spacing_medium"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/spacing_medium"
+            android:paddingVertical="@dimen/spacing_medium">
 
-            <TextView
-                style="@style/Widget.Auxio.TextView.Primary.Compact"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/lbl_skip_head_tail" />
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_speed_24"
+                app:tint="?attr/colorOnSurface" />
 
-            <TextView
-                android:id="@+id/setting_skip_head_tail_status"
-                style="@style/Widget.Auxio.TextView.Secondary.Compact"
-                android:layout_width="match_parent"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="@string/lbl_skip_head_tail_off" />
+                android:layout_marginStart="@dimen/spacing_medium"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.Auxio.TextView.Primary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/lbl_playback_speed" />
+
+                <TextView
+                    android:id="@+id/setting_speed_status"
+                    style="@style/Widget.Auxio.TextView.Secondary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    tools:text="1×" />
+            </LinearLayout>
         </LinearLayout>
-    </LinearLayout>
 
-    <!-- 5. 定时关闭 -->
-    <LinearLayout
-        android:id="@+id/setting_sleep_timer_item"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="@dimen/spacing_medium"
-        android:paddingVertical="@dimen/spacing_medium">
-
-        <ImageView
-            android:id="@+id/setting_sleep_timer_icon"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/hourglass_empty_40"
-            app:tint="?attr/colorOnSurface" />
-
+        <!-- 4. 跳过头尾 -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:id="@+id/setting_skip_head_tail_item"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/spacing_medium"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/spacing_medium"
+            android:paddingVertical="@dimen/spacing_medium">
 
-            <TextView
-                style="@style/Widget.Auxio.TextView.Primary.Compact"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/lbl_sleep_timer" />
+            <ImageView
+                android:id="@+id/setting_skip_head_tail_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_time_24"
+                app:tint="?attr/colorOnSurface" />
 
-            <TextView
-                android:id="@+id/setting_sleep_timer_status"
-                style="@style/Widget.Auxio.TextView.Secondary.Compact"
-                android:layout_width="match_parent"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="@string/lbl_sleep_timer_off" />
+                android:layout_marginStart="@dimen/spacing_medium"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.Auxio.TextView.Primary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/lbl_skip_head_tail" />
+
+                <TextView
+                    android:id="@+id/setting_skip_head_tail_status"
+                    style="@style/Widget.Auxio.TextView.Secondary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/lbl_skip_head_tail_off" />
+            </LinearLayout>
         </LinearLayout>
-    </LinearLayout>
 
-    <!-- 6. 系统均衡器 -->
-    <LinearLayout
-        android:id="@+id/setting_equalizer_item"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:background="?attr/selectableItemBackground"
-        android:clickable="true"
-        android:focusable="true"
-        android:gravity="center_vertical"
-        android:orientation="horizontal"
-        android:paddingHorizontal="@dimen/spacing_medium"
-        android:paddingVertical="@dimen/spacing_medium">
-
-        <ImageView
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:src="@drawable/ic_config_24"
-            app:tint="?attr/colorOnSurface" />
-
+        <!-- 5. 定时关闭 -->
         <LinearLayout
-            android:layout_width="0dp"
+            android:id="@+id/setting_sleep_timer_item"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:layout_marginStart="@dimen/spacing_medium"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/spacing_medium"
+            android:paddingVertical="@dimen/spacing_medium">
 
-            <TextView
-                style="@style/Widget.Auxio.TextView.Primary.Compact"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="系统均衡器" />
+            <ImageView
+                android:id="@+id/setting_sleep_timer_icon"
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@null"
+                android:src="@drawable/hourglass_empty_40"
+                app:tint="?attr/colorOnSurface" />
 
-            <TextView
-                style="@style/Widget.Auxio.TextView.Secondary.Compact"
-                android:layout_width="match_parent"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="调节系统音效与均衡器设置" />
+                android:layout_marginStart="@dimen/spacing_medium"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.Auxio.TextView.Primary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/lbl_sleep_timer" />
+
+                <TextView
+                    android:id="@+id/setting_sleep_timer_status"
+                    style="@style/Widget.Auxio.TextView.Secondary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/lbl_sleep_timer_off" />
+            </LinearLayout>
         </LinearLayout>
-    </LinearLayout>
 
-</LinearLayout>
+        <!-- 6. 系统均衡器 -->
+        <LinearLayout
+            android:id="@+id/setting_equalizer_item"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/spacing_medium"
+            android:paddingVertical="@dimen/spacing_medium">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_config_24"
+                app:tint="?attr/colorOnSurface" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_medium"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.Auxio.TextView.Primary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/lbl_equalizer" />
+
+                <TextView
+                    style="@style/Widget.Auxio.TextView.Secondary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/lng_equalizer_desc" />
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- Divider: appearance -->
+        <TextView
+            style="@style/Widget.Auxio.TextView.Secondary.Compact"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="@dimen/spacing_medium"
+            android:layout_marginTop="@dimen/spacing_small"
+            android:layout_marginBottom="@dimen/spacing_tiny"
+            android:text="@string/set_ui" />
+
+        <!-- 7. 色彩方案 (from Look and feel) -->
+        <LinearLayout
+            android:id="@+id/setting_accent_item"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="?attr/selectableItemBackground"
+            android:clickable="true"
+            android:focusable="true"
+            android:gravity="center_vertical"
+            android:orientation="horizontal"
+            android:paddingHorizontal="@dimen/spacing_medium"
+            android:paddingVertical="@dimen/spacing_medium">
+
+            <ImageView
+                android:layout_width="24dp"
+                android:layout_height="24dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_accent_dynamic_24"
+                app:tint="?attr/colorOnSurface" />
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="@dimen/spacing_medium"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.Auxio.TextView.Primary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/set_accent" />
+
+                <TextView
+                    android:id="@+id/setting_accent_status"
+                    style="@style/Widget.Auxio.TextView.Secondary.Compact"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    tools:text="Purple" />
+            </LinearLayout>
+        </LinearLayout>
+
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

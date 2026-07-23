@@ -57,8 +57,8 @@
                 android:layout_height="wrap_content"
                 android:layout_margin="@dimen/spacing_medium"
                 android:layout_gravity="bottom|end"
-                android:contentDescription="@string/lbl_shuffle"
-                android:src="@drawable/ic_shuffle_off_24" />
+                android:contentDescription="@string/desc_last_progress"
+                android:src="@drawable/ic_history_24" />
 
         </org.oxycblt.auxio.ui.EdgeFrameLayout>
 
@@ -117,14 +117,35 @@
 
                 <TextView
                     android:id="@+id/queue_title"
-                    android:layout_width="wrap_content"
+                    android:layout_width="0dp"
                     android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/spacing_medium"
+                    android:layout_marginEnd="@dimen/spacing_small"
+                    android:ellipsize="end"
+                    android:gravity="center_vertical"
+                    android:maxLines="1"
                     android:text="@string/lbl_queue"
                     android:textAppearance="?attr/textAppearanceLabelLargeEmphasized"
                     android:textColor="?attr/colorOnSurfaceVariant"
-                    app:layout_constraintBottom_toBottomOf="@+id/queue_handle"
-                    app:layout_constraintEnd_toEndOf="@+id/queue_handle"
-                    app:layout_constraintStart_toStartOf="parent" />
+                    app:layout_constraintBottom_toBottomOf="parent"
+                    app:layout_constraintEnd_toStartOf="@+id/queue_more"
+                    app:layout_constraintStart_toStartOf="parent"
+                    app:layout_constraintTop_toBottomOf="@+id/queue_handle"
+                    tools:text="Playlist · 12 songs" />
+
+                <org.oxycblt.auxio.ui.RippleFixMaterialButton
+                    android:id="@+id/queue_more"
+                    style="@style/Widget.Auxio.Button.Icon.Small"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginEnd="@dimen/spacing_mid_medium"
+                    android:contentDescription="@string/lbl_more"
+                    android:visibility="gone"
+                    app:icon="@drawable/ic_more_24"
+                    app:layout_constraintBottom_toBottomOf="@+id/queue_title"
+                    app:layout_constraintEnd_toEndOf="parent"
+                    app:layout_constraintTop_toTopOf="@+id/queue_title"
+                    tools:visibility="visible" />
 
             </androidx.constraintlayout.widget.ConstraintLayout>
 

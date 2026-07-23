@@ -54,8 +54,10 @@ import org.oxycblt.musikr.tag.Disc
  * @param listener A [DetailListAdapter.Listener] to bind interactions to.
  * @author Alexander Capehart (OxygenCobalt)
  */
-class AlbumDetailListAdapter(private val listener: Listener<Song>) :
-    DetailListAdapter(listener, DIFF_CALLBACK) {
+class AlbumDetailListAdapter(
+    private val listener: Listener<Song>,
+    private val playProgressStore: org.oxycblt.auxio.playback.SongPlayProgressStore,
+) : DetailListAdapter(listener, DIFF_CALLBACK) {
     override fun getItemViewType(position: Int) =
         when (getItem(position)) {
             // Support sub-headers for each disc, and special album songs.
@@ -77,8 +79,13 @@ class AlbumDetailListAdapter(private val listener: Listener<Song>) :
         super.onBindViewHolder(holder, position)
         when (val item = getItem(position)) {
             is DiscHeader -> (holder as DiscHeaderViewHolder).bind(item)
-            is Song -> (holder as AlbumSongViewHolder).bind(item, listener)
+            is Song -> (holder as AlbumSongViewHolder).bind(item, listener, playProgressStore)
         }
+    }
+
+    fun notifyProgressChanged(songUid: org.oxycblt.musikr.Music.UID) {
+        val index = currentList.indexOfFirst { it is Song && it.uid == songUid }
+        if (index >= 0) notifyItemChanged(index)
     }
 
     private companion object {
@@ -207,7 +214,11 @@ private class AlbumSongViewHolder private constructor(private val binding: ItemA
      * @param song The new [Song] to bind.
      * @param listener A [SelectableListListener] to bind interactions to.
      */
-    fun bind(song: Song, listener: SelectableListListener<Song>) {
+    fun bind(
+        song: Song,
+        listener: SelectableListListener<Song>,
+        playProgressStore: org.oxycblt.auxio.playback.SongPlayProgressStore,
+    ) {
         listener.bind(song, this, menuButton = binding.songMenu)
 
         val track = song.track
@@ -247,6 +258,15 @@ private class AlbumSongViewHolder private constructor(private val binding: ItemA
             } else {
                 duration
             }
+        org.oxycblt.auxio.playback.ui.SongPlayProgressUi.bind(
+            song,
+            playProgressStore,
+            binding.songPlayProgressFill,
+            binding.songName,
+            binding.songDuration,
+            binding.songTrackCover,
+            binding.songPlayProgressBar,
+        )
     }
 
     override fun updatePlayingIndicator(isActive: Boolean, isPlaying: Boolean) {

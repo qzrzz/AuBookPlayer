@@ -20,6 +20,7 @@ package org.oxycblt.auxio
 
 import android.app.Application
 import android.content.Intent
+import androidx.appcompat.app.AppCompatDelegate
 import androidx.core.content.pm.ShortcutInfoCompat
 import androidx.core.content.pm.ShortcutManagerCompat
 import androidx.core.graphics.drawable.IconCompat
@@ -30,6 +31,7 @@ import org.oxycblt.auxio.image.ImageSettings
 import org.oxycblt.auxio.playback.PlaybackSettings
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.util.CopyleftNoticeTree
+import org.oxycblt.auxio.util.isNight
 import timber.log.Timber
 
 /**
@@ -62,6 +64,13 @@ class Auxio : Application() {
         playbackSettings.migrate()
         uiSettings.migrate()
         homeSettings.migrate()
+
+        // Apply accent to the Application theme so services / media session / notifications
+        // resolve the same colors as MainActivity (otherwise system media controls stay on the
+        // default DynamicColors purple from the wallpaper).
+        AppCompatDelegate.setDefaultNightMode(uiSettings.theme)
+        setTheme(uiSettings.accentThemeRes(isNight))
+
         // Adding static shortcuts in a dynamic manner is better than declaring them
         // manually, as it will properly handle the difference between debug and release
         // Auxio instances.

@@ -53,6 +53,7 @@ import org.oxycblt.auxio.playback.state.PlaybackStateManager
 import org.oxycblt.auxio.playback.state.Progression
 import org.oxycblt.auxio.playback.state.QueueChange
 import org.oxycblt.auxio.playback.state.RepeatMode
+import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.newBroadcastPendingIntent
 import org.oxycblt.auxio.util.newMainPendingIntent
 import org.oxycblt.musikr.MusicParent
@@ -414,6 +415,17 @@ private class PlaybackNotification(
         setSilent(true)
         setContentIntent(context.newMainPendingIntent())
         setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
+        // Tint notification actions / legacy media chrome with the current accent (Application
+        // theme is synced to the selected color scheme). Avoids leftover Material purple.
+        runCatching {
+                val primary =
+                    context
+                        .getAttrColorCompat(androidx.appcompat.R.attr.colorPrimary)
+                        .defaultColor
+                setColor(primary)
+                setColorized(true)
+            }
+            .onFailure { L.w("Could not apply accent color to playback notification") }
 
         addAction(buildRepeatAction(context, RepeatMode.NONE))
         addAction(

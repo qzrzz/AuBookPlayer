@@ -29,6 +29,7 @@ import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 import org.oxycblt.auxio.list.ListSettings
 import org.oxycblt.auxio.list.adapter.UpdateInstructions
+import org.oxycblt.auxio.music.MusicRepository
 import org.oxycblt.auxio.music.SongFolder
 import org.oxycblt.auxio.playback.state.DeferredPlayback
 import org.oxycblt.auxio.playback.state.PlaybackCommand
@@ -42,6 +43,7 @@ import org.oxycblt.auxio.util.MutableEvent
 import org.oxycblt.musikr.Album
 import org.oxycblt.musikr.Artist
 import org.oxycblt.musikr.Genre
+import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.MusicParent
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
@@ -66,6 +68,10 @@ constructor(
     private val playlistSkipSettings: PlaylistSkipSettings,
     private val playlistProgressStore: PlaylistProgressStore,
     private val folderProgressStore: FolderProgressStore,
+    private val albumProgressStore: AlbumProgressStore,
+    private val songPlayProgressStore: SongPlayProgressStore,
+    private val lastSessionProgressStore: LastSessionProgressStore,
+    private val musicRepository: MusicRepository,
     private val skipHeadTailAnalyzer: SkipHeadTailAnalyzer,
 ) : ViewModel(), PlaybackStateManager.Listener, PlaybackSettings.Listener {
     private var lastPositionJob: Job? = null
@@ -73,11 +79,13 @@ constructor(
     /** Pending seek applied once new playlist/folder playback has started (last-progress resume). */
     private var pendingResumePositionMs: Long? = null
     private var lastProgressSaveMs = 0L
+    private val _activeFolder = MutableStateFlow<SongFolder?>(null)
     /**
-     * When non-null, progress is saved against this [SongFolder.key] (folders are not
-     * [MusicParent]s).
+     * When non-null, playback is from this folder (folders are not [MusicParent]s). Progress is
+     * saved against [SongFolder.key].
      */
-    private var activeFolderKey: String? = null
+    val activeFolder: StateFlow<SongFolder?>
+        get() = _activeFolder
 
     private val _song = MutableStateFlow<Song?>(null)
     /** The currently playing song. */
@@ -246,7 +254,7 @@ constructor(
         _isShuffled.value = isShuffled
         // Parent-based playback (playlist/album/…) clears folder progress tracking.
         if (parent != null) {
-            activeFolderKey = null
+            _activeFolder.value = null
         }
         refreshPlaylistSkip()
         // Resume position is applied after the player has started (skip-head may have run first).
@@ -315,6 +323,76 @@ constructor(
         L.d("Shuffling all songs")
         playFromAllImpl(null, ShuffleMode.ON)
     }
+
+    /** Play all songs in library order (no shuffle). */
+    fun playAll() {
+        L.d("Playing all songs in order")
+        pendingResumePositionMs = null
+        playFromAllImpl(null, ShuffleMode.OFF)
+    }
+
+    /**
+     * Home FAB action: resume the last listening session when one is stored and still valid,
+     * otherwise play the full library in order (never shuffle).
+     */
+    fun playFromLastProgressOrAll() {
+        val session = lastSessionProgressStore.get()
+        if (session == null) {
+            L.d("No last session progress, playing all songs in order")
+            playAll()
+            return
+        }
+        L.d("Resuming last session: ${session.scope} key=${session.key}")
+        when (session.scope) {
+            LastSessionScope.ALBUM -> {
+                val album = parseUid(session.key)?.let { musicRepository.find(it) } as? Album
+                if (album != null) {
+                    playFromLastProgress(album)
+                } else {
+                    L.d("Last session album missing, falling back to play all")
+                    playAll()
+                }
+            }
+            LastSessionScope.PLAYLIST -> {
+                val playlist = parseUid(session.key)?.let { musicRepository.find(it) } as? Playlist
+                if (playlist != null) {
+                    playFromLastProgress(playlist)
+                } else {
+                    L.d("Last session playlist missing, falling back to play all")
+                    playAll()
+                }
+            }
+            LastSessionScope.FOLDER -> {
+                val library = musicRepository.library
+                val folder =
+                    library?.let { lib ->
+                        SongFolder.fromSongs(lib.songs).find { it.key == session.key }
+                    }
+                if (folder != null) {
+                    playFromLastProgress(folder)
+                } else {
+                    L.d("Last session folder missing, falling back to play all")
+                    playAll()
+                }
+            }
+            LastSessionScope.ALL -> {
+                val library = musicRepository.library
+                val song = library?.songs?.find { it.uid == session.songUid }
+                if (song == null) {
+                    L.d("Last session song missing from library, playing all from start")
+                    playAll()
+                    return
+                }
+                val maxPos = (song.durationMs - 500L).coerceAtLeast(0L)
+                val positionMs = session.positionMs.coerceIn(0L, maxPos)
+                L.d("Resuming all-songs queue at $song @ ${positionMs}ms")
+                pendingResumePositionMs = positionMs
+                playFromAllImpl(song, ShuffleMode.OFF)
+            }
+        }
+    }
+
+    private fun parseUid(raw: String): Music.UID? = Music.UID.fromString(raw)
 
     /**
      * Play a [Song] from one of it's [Artist]s.
@@ -520,6 +598,34 @@ constructor(
     }
 
     /**
+     * Resume an [Album] from the last saved song and position ("last progress").
+     *
+     * Falls back to [play] from the start when no valid progress is stored or the song is no longer
+     * on the album.
+     */
+    fun playFromLastProgress(album: Album) {
+        val progress = albumProgressStore.get(album.uid)
+        val song = progress?.let { p -> album.songs.find { it.uid == p.songUid } }
+        if (progress == null || song == null) {
+            L.d("No valid last progress for $album, starting from beginning")
+            pendingResumePositionMs = null
+            play(album)
+            return
+        }
+        val maxPos = (song.durationMs - 500L).coerceAtLeast(0L)
+        val positionMs = progress.positionMs.coerceIn(0L, maxPos)
+        L.d("Resuming $album at $song @ ${positionMs}ms")
+        pendingResumePositionMs = positionMs
+        playImpl(commandFactory.songFromAlbum(song, ShuffleMode.OFF))
+    }
+
+    /** Whether [album] has a saved last-progress that still points at a song on the album. */
+    fun hasLastProgress(album: Album): Boolean {
+        val progress = albumProgressStore.get(album.uid) ?: return false
+        return album.songs.any { it.uid == progress.songUid }
+    }
+
+    /**
      * Play [folder] from the last saved song/position, or from the start if none is stored.
      */
     fun playFromLastProgress(folder: SongFolder) {
@@ -535,7 +641,7 @@ constructor(
         val positionMs = progress.positionMs.coerceIn(0L, maxPos)
         L.d("Resuming folder ${folder.key} at $song @ ${positionMs}ms")
         pendingResumePositionMs = positionMs
-        activeFolderKey = folder.key
+        _activeFolder.value = folder
         playImpl(commandFactory.songFrom(song, folder.songs, ShuffleMode.OFF))
     }
 
@@ -546,7 +652,8 @@ constructor(
     }
 
     /**
-     * Persist the current song/position for the active playlist parent or folder.
+     * Persist the current song/position for resume (playlist/album/folder) **and** shared
+     * per-song listen progress (greyscale / progress bar in lists).
      *
      * @param force When false, writes are rate-limited to [PROGRESS_SAVE_INTERVAL_MS].
      */
@@ -563,14 +670,66 @@ constructor(
             } else {
                 positionMs
             }
+        // Shared per-song progress (playlist / folder / album / queue lists).
+        // Use the uncapped position so reaching ≥80% can still complete the track.
+        songPlayProgressStore.record(song, positionMs)
+
         val progress = PlaylistProgress(song.uid, capped)
-        val playlist = playbackManager.parent as? Playlist
-        if (playlist != null) {
-            playlistProgressStore.set(playlist.uid, progress)
-            return
+        when (val parent = playbackManager.parent) {
+            is Playlist -> {
+                playlistProgressStore.set(parent.uid, progress)
+                lastSessionProgressStore.set(
+                    LastSessionProgress(
+                        LastSessionScope.PLAYLIST,
+                        parent.uid.toString(),
+                        song.uid,
+                        capped,
+                    )
+                )
+                return
+            }
+            is Album -> {
+                albumProgressStore.set(parent.uid, progress)
+                lastSessionProgressStore.set(
+                    LastSessionProgress(
+                        LastSessionScope.ALBUM,
+                        parent.uid.toString(),
+                        song.uid,
+                        capped,
+                    )
+                )
+                return
+            }
+            else -> {
+                val folder = _activeFolder.value
+                if (folder != null) {
+                    folderProgressStore.set(folder.key, progress)
+                    lastSessionProgressStore.set(
+                        LastSessionProgress(
+                            LastSessionScope.FOLDER,
+                            folder.key,
+                            song.uid,
+                            capped,
+                        )
+                    )
+                } else {
+                    // Playing from the full library (songs / artists home lists).
+                    lastSessionProgressStore.set(
+                        LastSessionProgress(LastSessionScope.ALL, "", song.uid, capped)
+                    )
+                }
+            }
         }
-        val folderKey = activeFolderKey ?: return
-        folderProgressStore.set(folderKey, progress)
+    }
+
+    /**
+     * Clear shared listen progress for every song in [songs] (playlist / folder / album "reset
+     * play history").
+     */
+    fun resetSongPlayHistory(songs: Collection<Song>) {
+        if (songs.isEmpty()) return
+        L.d("Resetting play history for ${songs.size} songs")
+        songPlayProgressStore.clearAll(songs.map { it.uid })
     }
 
     /**
@@ -578,7 +737,7 @@ constructor(
      */
     fun play(folder: SongFolder) {
         L.d("Playing folder ${folder.key} (${folder.songs.size} songs)")
-        activeFolderKey = folder.key
+        _activeFolder.value = folder
         playImpl(commandFactory.songs(folder.songs, ShuffleMode.OFF))
     }
 
@@ -587,7 +746,7 @@ constructor(
      */
     fun play(song: Song, folder: SongFolder) {
         L.d("Playing $song from folder ${folder.key}")
-        activeFolderKey = folder.key
+        _activeFolder.value = folder
         playImpl(commandFactory.songFrom(song, folder.songs, ShuffleMode.OFF))
     }
 
@@ -598,7 +757,7 @@ constructor(
      */
     fun play(songs: List<Song>) {
         L.d("Playing ${songs.size} songs")
-        activeFolderKey = null
+        _activeFolder.value = null
         playImpl(commandFactory.songs(songs, ShuffleMode.OFF))
     }
 
@@ -611,7 +770,7 @@ constructor(
     fun play(song: Song, queue: List<Song>) {
         L.d("Playing $song from a ${queue.size}-song list")
         // Bare list play is not folder-tracked unless callers use [play(song, folder)].
-        activeFolderKey = null
+        _activeFolder.value = null
         playImpl(commandFactory.songFrom(song, queue, ShuffleMode.OFF))
     }
 
@@ -622,7 +781,7 @@ constructor(
      */
     fun shuffle(songs: List<Song>) {
         L.d("Shuffling ${songs.size} songs")
-        activeFolderKey = null
+        _activeFolder.value = null
         playImpl(commandFactory.songs(songs, ShuffleMode.ON))
     }
 

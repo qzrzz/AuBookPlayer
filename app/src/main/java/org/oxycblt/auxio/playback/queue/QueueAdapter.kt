@@ -15,7 +15,7 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <https://www.gnu.org/licenses/>.
  */
- 
+
 package org.oxycblt.auxio.playback.queue
 
 import android.annotation.SuppressLint
@@ -36,9 +36,12 @@ import org.oxycblt.auxio.list.adapter.PlayingIndicatorAdapter
 import org.oxycblt.auxio.list.recycler.SongViewHolder
 import org.oxycblt.auxio.music.resolve
 import org.oxycblt.auxio.music.resolveNames
+import org.oxycblt.auxio.playback.SongPlayProgressStore
+import org.oxycblt.auxio.playback.ui.SongPlayProgressUi
 import org.oxycblt.auxio.util.context
 import org.oxycblt.auxio.util.getAttrColorCompat
 import org.oxycblt.auxio.util.inflater
+import org.oxycblt.musikr.Music
 import org.oxycblt.musikr.Playlist
 import org.oxycblt.musikr.Song
 import timber.log.Timber as L
@@ -46,14 +49,12 @@ import timber.log.Timber as L
 /**
  * A [RecyclerView.Adapter] that shows the playback queue (order is fixed; no drag reorder).
  *
- * @param listener A [ClickableListListener] to bind interactions to.
- * @author Alexander Capehart (OxygenCobalt)
+ * Greyscale / progress fill comes from shared [SongPlayProgressStore], not queue position.
  */
-class QueueAdapter(private val listener: ClickableListListener<Song>) :
-    FlexibleListAdapter<Song, QueueSongViewHolder>(QueueSongViewHolder.DIFF_CALLBACK) {
-    // Since PlayingIndicator adapter relies on an item value, we cannot use it for this
-    // adapter, as one item can appear at several points in the UI. Use a similar implementation
-    // with an index value instead.
+class QueueAdapter(
+    private val listener: ClickableListListener<Song>,
+    private val playProgressStore: SongPlayProgressStore,
+) : FlexibleListAdapter<Song, QueueSongViewHolder>(QueueSongViewHolder.DIFF_CALLBACK) {
     private var currentIndex = 0
     private var isPlaying = false
     /** When set, songs without cover art fall back to this playlist's cover. */
@@ -70,17 +71,14 @@ class QueueAdapter(private val listener: ClickableListListener<Song>) :
         position: Int,
         payload: List<Any>,
     ) {
-        if (payload.isEmpty()) {
-            viewHolder.bind(getItem(position), listener, fallbackPlaylist)
+        if (payload.isEmpty() || payload.contains(PAYLOAD_PROGRESS)) {
+            viewHolder.bind(getItem(position), listener, fallbackPlaylist, playProgressStore)
         }
-
-        viewHolder.isFuture = position > currentIndex
         viewHolder.updatePlayingIndicator(position == currentIndex, isPlaying)
     }
 
     /**
-     * Set the position of the currently playing item in the queue. This will mark the item as
-     * playing and any previous items as played.
+     * Set the position of the currently playing item in the queue.
      *
      * @param index The position of the currently playing item in the queue.
      * @param isPlaying Whether playback is ongoing or paused.
@@ -89,32 +87,32 @@ class QueueAdapter(private val listener: ClickableListListener<Song>) :
         L.d("Updating index")
         val lastIndex = currentIndex
         currentIndex = index
-
-        // Have to update not only the currently playing item, but also all items marked
-        // as playing.
-        // TODO: Optimize this by only updating the range between old and new indices?
-        // TODO: Don't update when the index has not moved.
-        if (currentIndex < lastIndex) {
-            L.d("Moved backwards, must update items above last index")
-            notifyItemRangeChanged(0, lastIndex + 1, PAYLOAD_UPDATE_POSITION)
-        } else {
-            L.d("Moved forwards, update items after index")
-            notifyItemRangeChanged(0, currentIndex + 1, PAYLOAD_UPDATE_POSITION)
+        // Only refresh playing indicator on the previous + current rows.
+        if (lastIndex in 0 until itemCount) {
+            notifyItemChanged(lastIndex, PAYLOAD_PLAYING)
         }
-
+        if (currentIndex in 0 until itemCount && currentIndex != lastIndex) {
+            notifyItemChanged(currentIndex, PAYLOAD_PLAYING)
+        }
         this.isPlaying = isPlaying
     }
 
+    /** Rebind a single song when its shared listen progress changes. */
+    fun notifyProgressChanged(songUid: Music.UID) {
+        val index = currentList.indexOfFirst { it.uid == songUid }
+        if (index >= 0) {
+            notifyItemChanged(index, PAYLOAD_PROGRESS)
+        }
+    }
+
     private companion object {
-        val PAYLOAD_UPDATE_POSITION = Any()
+        val PAYLOAD_PLAYING = Any()
+        val PAYLOAD_PROGRESS = Any()
     }
 }
 
 /**
- * A [PlayingIndicatorAdapter.ViewHolder] that displays a queue [Song]. Use [from] to create an
- * instance.
- *
- * @author Alexander Capehart (OxygenCobalt)
+ * A [PlayingIndicatorAdapter.ViewHolder] that displays a queue [Song].
  */
 class QueueSongViewHolder private constructor(private val binding: ItemEditableSongBinding) :
     PlayingIndicatorAdapter.ViewHolder(binding.root) {
@@ -129,21 +127,8 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
             fillColor = binding.context.getAttrColorCompat(MR.attr.colorSurfaceContainerHigh)
         }
 
-    /**
-     * Whether this ViewHolder should be full-opacity to represent a future item, or greyed out to
-     * represent a past item. True if former, false if latter.
-     */
-    var isFuture: Boolean
-        get() = binding.songAlbumCover.isEnabled
-        set(value) {
-            binding.songAlbumCover.isEnabled = value
-            binding.songName.isEnabled = value
-            binding.songInfo.isEnabled = value
-        }
-
     init {
         binding.body.background = LayerDrawable(arrayOf(roundableBackground, liftableBackground))
-        // Queue is read-only for order: hide drag handle and reclaim trailing space for text.
         binding.songDragHandle.isVisible = false
         binding.songMenu.isVisible = false
         binding.background.isInvisible = true
@@ -165,23 +150,26 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
         }
     }
 
-    /**
-     * Bind new data to this instance.
-     *
-     * @param song The new [Song] to bind.
-     * @param listener A [ClickableListListener] to bind interactions to.
-     * @param fallbackPlaylist Playlist cover used when [song] has no album art.
-     */
     @SuppressLint("ClickableViewAccessibility")
     fun bind(
         song: Song,
         listener: ClickableListListener<Song>,
         fallbackPlaylist: Playlist? = null,
+        playProgressStore: SongPlayProgressStore,
     ) {
         listener.bind(song, this, binding.body)
         binding.songAlbumCover.bind(song, fallbackPlaylist)
         binding.songName.text = song.name.resolve(binding.context)
         binding.songInfo.text = song.artists.resolveNames(binding.context)
+        SongPlayProgressUi.bind(
+            song,
+            playProgressStore,
+            binding.songPlayProgressFill,
+            binding.songName,
+            binding.songInfo,
+            binding.songAlbumCover,
+            binding.songPlayProgressBar,
+        )
     }
 
     override fun updatePlayingIndicator(isActive: Boolean, isPlaying: Boolean) {
@@ -190,16 +178,9 @@ class QueueSongViewHolder private constructor(private val binding: ItemEditableS
     }
 
     companion object {
-        /**
-         * Create a new instance.
-         *
-         * @param parent The parent to inflate this instance from.
-         * @return A new instance.
-         */
         fun from(parent: View) =
             QueueSongViewHolder(ItemEditableSongBinding.inflate(parent.context.inflater))
 
-        /** A comparator that can be used with DiffUtil. */
         val DIFF_CALLBACK = SongViewHolder.DIFF_CALLBACK
     }
 }

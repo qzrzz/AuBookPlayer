@@ -10,13 +10,17 @@ import dagger.hilt.android.AndroidEntryPoint
 import org.oxycblt.auxio.R
 import org.oxycblt.auxio.databinding.DialogPlaybackSettingsBinding
 import org.oxycblt.auxio.playback.state.RepeatMode
-import org.oxycblt.auxio.ui.ViewBindingBottomSheetDialogFragment
+import org.oxycblt.auxio.ui.ViewBindingSideSheetDialogFragment
+import org.oxycblt.auxio.ui.accent.AccentCustomizeDialog
 import org.oxycblt.auxio.util.collectImmediately
 import org.oxycblt.auxio.util.showToast
 
+/**
+ * Right-side drawer for quick playback settings, plus a shortcut to the look-and-feel color scheme.
+ */
 @AndroidEntryPoint
 class PlaybackSettingsBottomSheetFragment :
-    ViewBindingBottomSheetDialogFragment<DialogPlaybackSettingsBinding>() {
+    ViewBindingSideSheetDialogFragment<DialogPlaybackSettingsBinding>() {
 
     private val playbackModel: PlaybackViewModel by activityViewModels()
 
@@ -25,19 +29,15 @@ class PlaybackSettingsBottomSheetFragment :
 
     override fun onBindingCreated(
         binding: DialogPlaybackSettingsBinding,
-        savedInstanceState: Bundle?
+        savedInstanceState: Bundle?,
     ) {
         super.onBindingCreated(binding, savedInstanceState)
 
         // 1. Repeat Mode
-        binding.settingRepeatItem.setOnClickListener {
-            playbackModel.toggleRepeatMode()
-        }
+        binding.settingRepeatItem.setOnClickListener { playbackModel.toggleRepeatMode() }
 
         // 2. Shuffle Mode
-        binding.settingShuffleItem.setOnClickListener {
-            playbackModel.toggleShuffled()
-        }
+        binding.settingShuffleItem.setOnClickListener { playbackModel.toggleShuffled() }
 
         // 3. Playback Speed (single-choice menu)
         binding.settingSpeedItem.setOnClickListener { view ->
@@ -59,8 +59,12 @@ class PlaybackSettingsBottomSheetFragment :
         }
 
         // 6. Equalizer
-        binding.settingEqualizerItem.setOnClickListener {
-            openEqualizer()
+        binding.settingEqualizerItem.setOnClickListener { openEqualizer() }
+
+        // 7. Color scheme (from main Look and feel settings)
+        binding.settingAccentStatus.text = getString(uiSettings.accent.name)
+        binding.settingAccentItem.setOnClickListener {
+            AccentCustomizeDialog().show(parentFragmentManager, "Accent")
         }
 
         // Collect state updates
@@ -75,19 +79,25 @@ class PlaybackSettingsBottomSheetFragment :
         collectImmediately(playbackModel.sleepTimerState, ::updateSleepTimer)
     }
 
+    override fun onResume() {
+        super.onResume()
+        // Accent may have been changed (and activity recreated) while the drawer was open.
+        binding?.settingAccentStatus?.text = getString(uiSettings.accent.name)
+    }
+
     private fun updateRepeat(repeatMode: RepeatMode) {
         val binding = requireBinding()
         when (repeatMode) {
             RepeatMode.NONE -> {
-                binding.settingRepeatStatus.text = "关闭"
+                binding.settingRepeatStatus.setText(R.string.lbl_repeat_off)
                 binding.settingRepeatIcon.setImageResource(R.drawable.ic_repeat_off_24)
             }
             RepeatMode.ALL -> {
-                binding.settingRepeatStatus.text = "列表循环"
+                binding.settingRepeatStatus.setText(R.string.lbl_repeat_all)
                 binding.settingRepeatIcon.setImageResource(R.drawable.ic_repeat_on_24)
             }
             RepeatMode.TRACK -> {
-                binding.settingRepeatStatus.text = "单曲循环"
+                binding.settingRepeatStatus.setText(R.string.lbl_repeat_one)
                 binding.settingRepeatIcon.setImageResource(R.drawable.ic_repeat_one_24)
             }
         }
@@ -95,7 +105,9 @@ class PlaybackSettingsBottomSheetFragment :
 
     private fun updateShuffle(isShuffled: Boolean) {
         val binding = requireBinding()
-        binding.settingShuffleStatus.text = if (isShuffled) "开启" else "关闭"
+        binding.settingShuffleStatus.setText(
+            if (isShuffled) R.string.lbl_on else R.string.lbl_off
+        )
     }
 
     private fun updateSpeed(speed: Float) {
@@ -144,7 +156,7 @@ class PlaybackSettingsBottomSheetFragment :
                 .putExtra(AudioEffect.EXTRA_CONTENT_TYPE, AudioEffect.CONTENT_TYPE_MUSIC)
         try {
             startActivity(equalizerIntent)
-        } catch (e: ActivityNotFoundException) {
+        } catch (_: ActivityNotFoundException) {
             requireContext().showToast(R.string.err_no_app)
         }
     }

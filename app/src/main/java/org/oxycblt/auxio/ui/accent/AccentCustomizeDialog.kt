@@ -30,6 +30,7 @@ import org.oxycblt.auxio.databinding.DialogAccentBinding
 import org.oxycblt.auxio.list.ClickableListListener
 import org.oxycblt.auxio.ui.UISettings
 import org.oxycblt.auxio.ui.ViewBindingMaterialDialogFragment
+import org.oxycblt.auxio.util.isNight
 import org.oxycblt.auxio.util.unlikelyToBeNull
 import timber.log.Timber as L
 
@@ -41,7 +42,7 @@ import timber.log.Timber as L
 @AndroidEntryPoint
 class AccentCustomizeDialog :
     ViewBindingMaterialDialogFragment<DialogAccentBinding>(), ClickableListListener<Accent> {
-    private var accentAdapter = AccentAdapter(this)
+    private var accentAdapter: AccentAdapter? = null
     @Inject lateinit var uiSettings: UISettings
 
     override fun onCreateBinding(inflater: LayoutInflater) = DialogAccentBinding.inflate(inflater)
@@ -50,13 +51,14 @@ class AccentCustomizeDialog :
         builder
             .setTitle(R.string.set_accent)
             .setPositiveButton(R.string.lbl_ok) { _, _ ->
-                if (accentAdapter.selectedAccent == uiSettings.accent) {
+                val selected = accentAdapter?.selectedAccent
+                if (selected == null || selected == uiSettings.accent) {
                     // Nothing to do.
                     return@setPositiveButton
                 }
 
                 L.d("Applying new accent")
-                uiSettings.accent = unlikelyToBeNull(accentAdapter.selectedAccent)
+                uiSettings.accent = selected
                 requireActivity().recreate()
                 dismiss()
             }
@@ -64,9 +66,16 @@ class AccentCustomizeDialog :
     }
 
     override fun onBindingCreated(binding: DialogAccentBinding, savedInstanceState: Bundle?) {
-        binding.accentRecycler.adapter = accentAdapter
+        // Preview against the same theme variant the activity is currently using.
+        val adapter =
+            AccentAdapter(
+                listener = this,
+                useBlackTheme = requireContext().isNight && uiSettings.useBlackTheme,
+            )
+        accentAdapter = adapter
+        binding.accentRecycler.adapter = adapter
         // Restore a previous pending accent if possible, otherwise select the current setting.
-        accentAdapter.setSelectedAccent(
+        adapter.setSelectedAccent(
             if (savedInstanceState != null) {
                 Accent.from(savedInstanceState.getInt(KEY_PENDING_ACCENT))
             } else {
@@ -78,15 +87,19 @@ class AccentCustomizeDialog :
     override fun onSaveInstanceState(outState: Bundle) {
         super.onSaveInstanceState(outState)
         // Save any pending accent configuration to restore if this dialog is re-created.
-        outState.putInt(KEY_PENDING_ACCENT, unlikelyToBeNull(accentAdapter.selectedAccent).index)
+        outState.putInt(
+            KEY_PENDING_ACCENT,
+            unlikelyToBeNull(accentAdapter?.selectedAccent).index,
+        )
     }
 
     override fun onDestroyBinding(binding: DialogAccentBinding) {
         binding.accentRecycler.adapter = null
+        accentAdapter = null
     }
 
     override fun onClick(item: Accent, viewHolder: RecyclerView.ViewHolder) {
-        accentAdapter.setSelectedAccent(item)
+        accentAdapter?.setSelectedAccent(item)
     }
 
     private companion object {

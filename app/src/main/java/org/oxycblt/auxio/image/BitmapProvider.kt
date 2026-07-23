@@ -89,8 +89,10 @@ constructor(
     private var currentRequest: Request? = null
     private var currentHandle = 0L
 
-    /** Cached neutral placeholder for songs with no cover art. */
+    /** Cached accent-colored placeholder for songs with no cover art. */
     @Volatile private var placeholderBitmap: Bitmap? = null
+    /** [colorPrimaryContainer] used when [placeholderBitmap] was created (invalidates cache). */
+    @Volatile private var placeholderColorKey: Int = 0
 
     /** If this provider is currently attempting to load something. */
     val isBusy: Boolean
@@ -166,20 +168,44 @@ constructor(
         ++currentHandle
         currentRequest?.run { disposable.dispose() }
         currentRequest = null
+        // Drop themed placeholder so the next load picks up a new accent.
+        placeholderBitmap = null
+        placeholderColorKey = 0
     }
 
     /**
-     * Neutral album-icon tile for media session / notification when no cover is available.
+     * Soft Material You album-icon tile for media session / notification when no cover is available.
      *
-     * Using a multi-tone software bitmap avoids the solid purple tile that system UI draws from
-     * the app theme primary when album art is missing or is a monochrome hardware bitmap.
+     * Uses primary-container tones with moderated contrast so system media chrome stays aligned
+     * with the app accent without a harsh purple solid fill.
      */
     private fun placeholder(): Bitmap {
+        val (background, foreground) =
+            runCatching { context.textCoverPalette(seed = 0) }
+                .getOrElse {
+                    val bg =
+                        runCatching {
+                                context
+                                    .getAttrColorCompat(MR.attr.colorPrimaryContainer)
+                                    .defaultColor
+                            }
+                            .getOrDefault(0xFFE8DEF8.toInt())
+                    val fg =
+                        runCatching {
+                                context
+                                    .getAttrColorCompat(MR.attr.colorOnPrimaryContainer)
+                                    .defaultColor
+                            }
+                            .getOrDefault(0xFF1D1B20.toInt())
+                    bg to fg
+                }
         placeholderBitmap?.let {
-            if (!it.isRecycled) return it
+            if (!it.isRecycled && placeholderColorKey == background) return it
         }
-        val created = createPlaceholderBitmap(context, MEDIA_COVER_EDGE_PX)
+        val created =
+            createPlaceholderBitmap(context, MEDIA_COVER_EDGE_PX, background, foreground)
         placeholderBitmap = created
+        placeholderColorKey = background
         return created
     }
 
@@ -216,28 +242,19 @@ private fun Bitmap.toSoftwareArgb8888(): Bitmap {
     return result
 }
 
-/** Draw a software ARGB_8888 album-icon placeholder on a neutral surface background. */
-private fun createPlaceholderBitmap(context: Context, size: Int): Bitmap {
+/** Draw a software ARGB_8888 album-icon placeholder with the given theme colors. */
+private fun createPlaceholderBitmap(
+    context: Context,
+    size: Int,
+    @androidx.annotation.ColorInt background: Int,
+    @androidx.annotation.ColorInt foreground: Int,
+): Bitmap {
     val bitmap = Bitmap.createBitmap(size, size, Bitmap.Config.ARGB_8888)
     val canvas = Canvas(bitmap)
-
-    // Prefer themed surface colors; fall back to neutral grays if attrs fail.
-    val background =
-        runCatching {
-                context.getAttrColorCompat(MR.attr.colorSurfaceContainer).defaultColor
-            }
-            .getOrDefault(0xFF2B2930.toInt())
-    val foreground =
-        runCatching {
-                context.getAttrColorCompat(MR.attr.colorOnSurfaceVariant).defaultColor
-            }
-            .getOrDefault(0xFFCAC4D0.toInt())
-
     canvas.drawColor(background)
 
     val icon: Drawable =
-        ContextCompat.getDrawable(context, R.drawable.ic_album_24)?.mutate()
-            ?: return bitmap
+        ContextCompat.getDrawable(context, R.drawable.ic_album_24)?.mutate() ?: return bitmap
     DrawableCompat.setTint(icon, foreground)
     // Match in-app CoverView: icon is roughly half the cover edge, centered.
     val pad = size / 4
