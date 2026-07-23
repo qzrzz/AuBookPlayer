@@ -1,0 +1,14 @@
+{
+  "name": "aubookplayer-scripts",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "release": "bun run scripts/release.mjs",
+    "release:minor": "bun run scripts/release.mjs --minor"
+
+  },
+  "devDependencies": {
+    "chalk": "^5.4.1"
+  }
+}
