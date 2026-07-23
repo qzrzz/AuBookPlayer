@@ -4,11 +4,12 @@
 
 基于开源音乐播放器 [Auxio](https://github.com/oxygencobalt/Auxio) 改造而来，以适用于播放本地有声书的场景。
 
+
 很难想象，Android 上竟然没有一款播放本地有声书时好用的播放器，要么缺少功能（跳过头尾、倍数播放、定时关闭）
 要么复杂难用，要么广告太多。所以我基于基于开源音乐播放器 [Auxio](https://github.com/oxygencobalt/Auxio) 开发出 AuBookPlayer，专为简单
 好用的播放本地有声书。
 
-
+![](./docs/images/cover-mini@2x.png)
 
 - 倍数播放
 - 定时关闭
